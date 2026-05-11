@@ -77,10 +77,37 @@
 						: console.log;
 
 			if (null !== entry.meta) {
-				logFn(prefix, msg, entry.meta);
+				// [EDGE] Strip undefined/null props so `{ error: undefined }`
+				// doesn't render as `[object Object]` when surfaced by harnesses
+				// that stringify the meta arg.
+				const cleaned = this._cleanMeta(entry.meta);
+				if (cleaned !== null) {
+					logFn(prefix, msg, cleaned);
+				} else {
+					logFn(prefix, msg);
+				}
 			} else {
 				logFn(prefix, msg);
 			}
+		}
+
+		/**
+		 * Remove undefined/null leaves from a shallow meta object. Returns null
+		 * when nothing is left to print.
+		 * @private
+		 */
+		_cleanMeta(meta) {
+			if (null === meta || 'object' !== typeof meta) return meta;
+			const out = {};
+			let hasAny = false;
+			for (const k of Object.keys(meta)) {
+				const v = meta[k];
+				if (v === undefined || v === null) continue;
+				if ('string' === typeof v && 0 === v.length) continue;
+				out[k] = v;
+				hasAny = true;
+			}
+			return hasAny ? out : null;
 		}
 
 		/**

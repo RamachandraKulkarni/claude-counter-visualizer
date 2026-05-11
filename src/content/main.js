@@ -235,13 +235,15 @@
 		};
 
 		if (db?.putSnapshot) {
-			db.putSnapshot(snapshot).catch((e) => warn('persistSnapshot.db', { error: e?.message }));
+			// [EDGE] Best-effort persistence. Storage errors are surfaced inside
+			// db.putSnapshot via reportError; swallow here to avoid log noise.
+			db.putSnapshot(snapshot).catch(() => { /* logged in db.js */ });
 		}
 		if (messaging?.send) {
-			messaging.send(messaging.KIND.SNAPSHOT_PUT, snapshot).catch((e) => {
-				// [EDGE] Service worker may be asleep; not fatal.
-				warn('persistSnapshot.sw', { error: e?.message });
-			});
+			// [EDGE] Service worker may be asleep when we ship the snapshot. The
+			// SW wakes on the next message and the popup's LIVE_STATE_GET path
+			// covers the gap, so failure here is expected noise — silence it.
+			messaging.send(messaging.KIND.SNAPSHOT_PUT, snapshot).catch(() => { /* SW asleep */ });
 		}
 	}
 
