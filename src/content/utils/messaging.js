@@ -18,7 +18,13 @@
 		FOCUS_CHAT: 'focus.chat',
 		SCROLL_TO_MESSAGE: 'scroll.to.message',
 		HEAVIEST_MESSAGES_GET: 'heaviest.get',
-		FORECAST_GET: 'forecast.get'
+		FORECAST_GET: 'forecast.get',
+		// Phase 2 — content-script-side queries used as popup fallbacks.
+		LIVE_STATE_GET: 'live.state.get',
+		ROLLUPS_GET: 'rollups.get',
+		STORAGE_ESTIMATE: 'storage.estimate',
+		OPEN_FORENSICS: 'open.forensics',
+		MESSAGES_FOR_CONVERSATION: 'messages.forConversation'
 	});
 
 	const VALID_KINDS = new Set(Object.values(KIND));

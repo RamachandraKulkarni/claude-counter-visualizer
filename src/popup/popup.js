@@ -15,7 +15,8 @@
 		HEAVIEST_MESSAGES_GET: 'heaviest.get',
 		ROLLUPS_GET: 'rollups.get',
 		OPEN_FORENSICS: 'open.forensics',
-		MESSAGES_FOR_CONVERSATION: 'messages.forConversation'
+		MESSAGES_FOR_CONVERSATION: 'messages.forConversation',
+		LIVE_STATE_GET: 'live.state.get'
 	});
 
 	const MODEL_COLORS = Object.freeze({
@@ -471,6 +472,32 @@
 		refs.chatModelsText.textContent = parts.join(' · ');
 	}
 
+	/**
+	 * Query the active claude.ai tab for its live state. Returns null when no
+	 * such tab exists or the content script doesn't answer.
+	 */
+	async function fetchLiveStateFromActiveTab() {
+		if (!tabsApi?.query) return null;
+		try {
+			const tabs = await new Promise((resolve) => {
+				const ret = tabsApi.query({ url: 'https://claude.ai/*', active: true }, (t) => resolve(t || []));
+				if (ret && typeof ret.then === 'function') ret.then(resolve, () => resolve([]));
+			});
+			let tab = tabs[0];
+			if (!tab) {
+				// Fall back to any claude.ai tab — last-active wins per content script.
+				const all = await new Promise((resolve) => {
+					const ret = tabsApi.query({ url: 'https://claude.ai/*' }, (t) => resolve(t || []));
+					if (ret && typeof ret.then === 'function') ret.then(resolve, () => resolve([]));
+				});
+				tab = all[0];
+			}
+			if (!tab) return null;
+			const res = await sendToTab(tab.id, KIND.LIVE_STATE_GET, {});
+			return res?.ok && res.state ? res.state : null;
+		} catch { return null; }
+	}
+
 	async function refreshHeaviest() {
 		if (!tabsApi?.query) return;
 		try {
@@ -646,17 +673,27 @@
 		} catch { /* noop */ }
 
 		// 2. Pull cached state from service worker (no claude.ai tab required).
+		let state = null;
 		const res = await send(KIND.STATE_GET);
-		if (res?.state) renderState(res.state);
-		else renderState(null);
+		if (res?.state?.snapshot) state = res.state;
 
-		// 3. Per-model card from rollups.
+		// 3. Fallback: ask the active claude.ai tab for its live state. Covers
+		//    the case where the SW cache is empty (first install, just-installed
+		//    upgrade) but the content script already has usage + context data.
+		if (!state) {
+			const liveTabState = await fetchLiveStateFromActiveTab();
+			if (liveTabState) state = liveTabState;
+		}
+
+		renderState(state);
+
+		// 4. Per-model card from rollups.
 		renderModelsBar(lastRollups);
 
-		// 4. Pull heaviest list from active claude.ai tab if any.
+		// 5. Pull heaviest list from active claude.ai tab if any.
 		refreshHeaviest();
 
-		// 5. Per-chat model breakdown — read messages_meta for the active chat
+		// Per-chat model breakdown — read messages_meta for the active chat
 		//    through the service worker (works even when the tab is closed).
 		try {
 			let conversationId = null;

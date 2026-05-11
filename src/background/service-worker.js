@@ -22,6 +22,7 @@ const KIND = Object.freeze({
 	HEAVIEST_MESSAGES_GET: 'heaviest.get',
 	FORECAST_GET: 'forecast.get',
 	// Phase 2
+	LIVE_STATE_GET: 'live.state.get',
 	ROLLUPS_GET: 'rollups.get',
 	STORAGE_ESTIMATE: 'storage.estimate',
 	OPEN_FORENSICS: 'open.forensics',

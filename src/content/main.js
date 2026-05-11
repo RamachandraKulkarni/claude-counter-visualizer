@@ -252,6 +252,27 @@
 
 	let lastContextMetrics = null;
 
+	/**
+	 * Snapshot the content script's current usage + context for popup fallback.
+	 * [EDGE] All fields may be null when no SSE/usage event has fired yet —
+	 * the popup renders the placeholders in that case.
+	 */
+	function getLiveState() {
+		const snapshot = {
+			ts: Date.now(),
+			sessionPct: numericPct(usageState?.five_hour?.utilization),
+			weeklyPct: numericPct(usageState?.seven_day?.utilization),
+			sessionResetMs: usageResetMs.five_hour,
+			weeklyResetMs: usageResetMs.seven_day,
+			contextPct: lastContextMetrics?.usedPct ?? null,
+			contextTokens: lastContextMetrics?.totalTokens ?? null,
+			contextRemaining: lastContextMetrics?.remainingTokens ?? null,
+			contextHealth: lastContextMetrics?.contextHealth ?? null,
+			model: CC.modelDetect?.getCurrentModel?.() || null
+		};
+		return { snapshot, forecast: null, staleSince: null, lastUpdatedMs: Date.now() };
+	}
+
 	function updateOrgIdIfNeeded(newOrgId) {
 		if (newOrgId && typeof newOrgId === 'string' && newOrgId !== currentOrgId) {
 			currentOrgId = newOrgId;
@@ -339,6 +360,11 @@
 		const metrics = await CC.tokens.computeConversationMetrics(data);
 		lastContextMetrics = metrics;
 		ui.setConversationMetrics(metrics);
+
+		// [EDGE] Re-publish the snapshot so the SW cache gains the context
+		// fields. Without this the popup's Now card would stay blank until the
+		// next usage/SSE event fires.
+		if (usageState) persistSnapshot(usageState, 'context');
 
 		// [CONFIG] Feed estimator with the current trunk total so its color
 		// thresholds reflect remaining context, not raw composer size.
@@ -512,6 +538,11 @@
 				const conversationId = msg.payload?.conversationId || currentConversationId;
 				const entry = heaviestCache.get(conversationId);
 				return { ok: true, heaviest: entry?.heaviest || [], conversationId };
+			}
+			if (msg.kind === messaging.KIND.LIVE_STATE_GET) {
+				// [EDGE] Popup falls back to this when the SW cache is empty
+				// (e.g. first install before any snapshot was persisted).
+				return { ok: true, state: getLiveState() };
 			}
 			return undefined;
 		});
