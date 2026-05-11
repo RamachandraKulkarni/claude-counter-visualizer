@@ -92,6 +92,26 @@
 		});
 	}
 
+	/**
+	 * Send to a specific tab's content script. Returns null when the tab has no
+	 * receiver (e.g. claude.ai still loading) instead of leaving an unchecked
+	 * runtime.lastError on the console.
+	 */
+	function sendToTab(tabId, kind, payload) {
+		return new Promise((resolve) => {
+			if (!tabsApi?.sendMessage || 'number' !== typeof tabId) { resolve(null); return; }
+			try {
+				const cb = (response) => {
+					// [EDGE] Must read lastError on the callback to consume it.
+					if (runtime?.lastError) { resolve(null); return; }
+					resolve(response);
+				};
+				const ret = tabsApi.sendMessage(tabId, { kind, payload }, cb);
+				if (ret && typeof ret.then === 'function') ret.then(resolve, () => resolve(null));
+			} catch { resolve(null); }
+		});
+	}
+
 	function formatPct(v) {
 		if ('number' !== typeof v) return '—';
 		return `${(Math.round(v * 10) / 10).toFixed(1)}%`;
@@ -460,13 +480,7 @@
 			});
 			const tab = tabs[0];
 			if (!tab) { renderHeaviest([], null); return; }
-			const res = await new Promise((resolve) => {
-				try {
-					const cb = (response) => resolve(response);
-					const ret = tabsApi.sendMessage(tab.id, { kind: KIND.HEAVIEST_MESSAGES_GET, payload: {} }, cb);
-					if (ret && typeof ret.then === 'function') ret.then(resolve, () => resolve(null));
-				} catch { resolve(null); }
-			});
+			const res = await sendToTab(tab.id, KIND.HEAVIEST_MESSAGES_GET, {});
 			if (res?.ok) renderHeaviest(res.heaviest || [], res.conversationId);
 			else renderHeaviest([], null);
 		} catch { renderHeaviest([], null); }

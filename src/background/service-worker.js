@@ -164,6 +164,20 @@ const notifications = globalThis.browser?.notifications || globalThis.chrome?.no
 const tabsApi = globalThis.browser?.tabs || globalThis.chrome?.tabs || null;
 const runtime = globalThis.browser?.runtime || globalThis.chrome?.runtime || null;
 
+/**
+ * Send to a tab's content script and swallow the "Receiving end does not exist"
+ * error that fires when the tab is still loading or doesn't host claude.ai.
+ * [EDGE] Must read `runtime.lastError` inside the callback to consume it.
+ */
+function sendToTab(tabId, kind, payload) {
+	if (!tabsApi?.sendMessage || 'number' !== typeof tabId) return;
+	try {
+		const cb = () => { void runtime?.lastError; };
+		const ret = tabsApi.sendMessage(tabId, { kind, payload }, cb);
+		if (ret && typeof ret.then === 'function') ret.then(() => {}, () => {});
+	} catch { /* tab unreachable */ }
+}
+
 // ---------------------------------------------------------------------------
 // IndexedDB access from the SW context. Mirrors `utils/db.js` schema names —
 // the SW only reads/writes via promisified requests, never creates stores.
@@ -646,7 +660,9 @@ if (runtime?.onMessage?.addListener) {
 				case KIND.SETTINGS_SET: {
 					const next = msg.payload || {};
 					await setSettings(next);
-					// Notify all content scripts.
+					// Notify all content scripts. Each send needs a callback so the
+					// unchecked-lastError warning isn't emitted when a tab hasn't
+					// loaded the content script yet.
 					if (tabsApi?.query) {
 						try {
 							const tabs = await new Promise((resolve) => {
@@ -654,9 +670,7 @@ if (runtime?.onMessage?.addListener) {
 								if (ret && typeof ret.then === 'function') ret.then(resolve, () => resolve([]));
 							});
 							for (const t of tabs) {
-								try {
-									tabsApi.sendMessage(t.id, { kind: KIND.SETTINGS_CHANGED, payload: next });
-								} catch { /* tab unreachable */ }
+								sendToTab(t.id, KIND.SETTINGS_CHANGED, next);
 							}
 						} catch (e) {
 							log('warn', 'tabs.query failed', { error: e?.message });
@@ -756,7 +770,7 @@ if (runtime?.onMessage?.addListener) {
 							if (ret && typeof ret.then === 'function') ret.then(resolve, () => resolve([]));
 						}))[0];
 						if (target) {
-							tabsApi.sendMessage(target.id, { kind: KIND.SCROLL_TO_MESSAGE, payload: msg.payload });
+							sendToTab(target.id, KIND.SCROLL_TO_MESSAGE, msg.payload);
 							tabsApi.update(target.id, { active: true });
 						}
 					} catch (e) {
