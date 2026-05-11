@@ -30,7 +30,9 @@ const KIND = Object.freeze({
 	// Phase 3 — pins & re-injection
 	PIN_HOTKEY: 'pin.fromHotkey',
 	PIN_CONTEXT_MENU: 'pin.fromContextMenu',
-	COMPOSER_INSERT: 'composer.insert'
+	COMPOSER_INSERT: 'composer.insert',
+	// Phase 4 — graph
+	OPEN_GRAPH: 'open.graph'
 });
 
 // [CONFIG] Defaults seeded on install. Mirrors options page UI.
@@ -67,6 +69,14 @@ const DEFAULT_SETTINGS = Object.freeze({
 	history: {
 		// [CONFIG] Days of daily_rollups to retain. PRD F8 range 30-365.
 		retentionDays: 90
+	},
+	graph: {
+		// [CONFIG] Phase 4. Above this pin count we render the clustered overview.
+		forceLoadThreshold: 2000,
+		showCooccur: true,
+		showTag: true,
+		showManual: true,
+		palette: 'default'    // 'default' | 'colorblind' | 'pastel' (reserved)
 	}
 });
 
@@ -811,6 +821,18 @@ if (runtime?.onMessage?.addListener) {
 						const windows = globalThis.browser?.windows || globalThis.chrome?.windows;
 						if (target.windowId !== undefined) windows?.update?.(target.windowId, { focused: true });
 						sendToTab(target.id, KIND.COMPOSER_INSERT, { text });
+						sendResponse({ ok: true });
+					} catch (e) {
+						sendResponse({ ok: false, error: e?.message });
+					}
+					return;
+				}
+
+				case KIND.OPEN_GRAPH: {
+					if (!tabsApi?.create || !runtime?.getURL) { sendResponse({ ok: false }); return; }
+					try {
+						const url = runtime.getURL('src/graph/index.html');
+						tabsApi.create({ url });
 						sendResponse({ ok: true });
 					} catch (e) {
 						sendResponse({ ok: false, error: e?.message });

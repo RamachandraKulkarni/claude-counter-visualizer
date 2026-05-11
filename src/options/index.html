@@ -107,6 +107,31 @@
 			</div>
 		</section>
 
+		<section class="cc-section" aria-labelledby="cc-sec-graph">
+			<h2 id="cc-sec-graph">Graph</h2>
+			<p class="cc-help">Visualize pinned messages as a network. Above the force-load threshold the view collapses into a clustered overview.</p>
+
+			<label class="cc-row-label">Force-load threshold
+				<input type="number" min="500" max="5000" step="50" data-setting="graph.forceLoadThreshold">
+				<span class="cc-status">pins</span>
+			</label>
+
+			<p class="cc-help" style="margin-top: 14px;">Edge kinds visible by default:</p>
+			<div class="cc-grid">
+				<label><input type="checkbox" data-setting="graph.showCooccur"> Co-occurrence (same chat)</label>
+				<label><input type="checkbox" data-setting="graph.showTag"> Same tag</label>
+				<label><input type="checkbox" data-setting="graph.showManual"> Manual links</label>
+			</div>
+
+			<label class="cc-row-label">Color palette
+				<select data-setting="graph.palette">
+					<option value="default">Default (12-color qualitative)</option>
+					<option value="colorblind">Colorblind-friendly</option>
+					<option value="pastel">Pastel</option>
+				</select>
+			</label>
+		</section>
+
 		<section class="cc-section cc-danger" aria-labelledby="cc-sec-danger">
 			<h2 id="cc-sec-danger">Data</h2>
 			<p class="cc-help">Wipe all local data: snapshots, message metadata, pins, settings. Cannot be undone.</p>

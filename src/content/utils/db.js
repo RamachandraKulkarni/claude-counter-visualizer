@@ -713,6 +713,104 @@
 		}
 	}
 
+	// -------------------------------------------------------------------------
+	// Links (Phase 4) — manual pin-to-pin relationships.
+	// Auto-edges (co-occurrence, same-tag) are computed at render time, never
+	// persisted. Only manual links live in this store.
+	// -------------------------------------------------------------------------
+
+	async function putLink(link) {
+		if (!link || 'object' !== typeof link) return null;
+		if ('string' !== typeof link.fromPinId || 'string' !== typeof link.toPinId) return null;
+		const row = {
+			id: typeof link.id === 'string' ? link.id : _uuid(),
+			fromPinId: link.fromPinId,
+			toPinId: link.toPinId,
+			label: typeof link.label === 'string' ? link.label.slice(0, 200) : '',
+			createdAt: numOrNull(link.createdAt) ?? Date.now(),
+			weight: numOrNull(link.weight) ?? 1,
+			kind: 'manual'
+		};
+		try {
+			await put(STORES.LINKS, row);
+			return row;
+		} catch (e) {
+			reportError(e, 'db.putLink');
+			return null;
+		}
+	}
+
+	async function deleteLink(id) {
+		if ('string' !== typeof id || 0 === id.length) return false;
+		try {
+			await del(STORES.LINKS, id);
+			return true;
+		} catch (e) {
+			reportError(e, 'db.deleteLink');
+			return false;
+		}
+	}
+
+	async function getAllLinks() {
+		try { return await getAll(STORES.LINKS); }
+		catch (e) { reportError(e, 'db.getAllLinks'); return []; }
+	}
+
+	async function getLinksForPin(pinId) {
+		if ('string' !== typeof pinId) return [];
+		try {
+			const [outgoing, incoming] = await Promise.all([
+				getAll(STORES.LINKS, { index: 'by-from', query: IDBKeyRange.only(pinId) }),
+				getAll(STORES.LINKS, { index: 'by-to', query: IDBKeyRange.only(pinId) })
+			]);
+			// Dedupe (a link can't be both in by-from and by-to for the same pin
+			// since fromPinId !== toPinId, but defend anyway).
+			const seen = new Set();
+			const out = [];
+			for (const l of [...outgoing, ...incoming]) {
+				if (seen.has(l.id)) continue;
+				seen.add(l.id);
+				out.push(l);
+			}
+			return out;
+		} catch (e) {
+			reportError(e, 'db.getLinksForPin');
+			return [];
+		}
+	}
+
+	/**
+	 * Cascade-delete all links whose from/to references the given pinId.
+	 * Returns the count of links removed. Single-transaction.
+	 */
+	async function cascadeDeleteLinksForPin(pinId) {
+		if ('string' !== typeof pinId) return 0;
+		try {
+			const db = await open();
+			const tx = db.transaction(STORES.LINKS, 'readwrite');
+			const store = tx.objectStore(STORES.LINKS);
+			let removed = 0;
+			await new Promise((resolve, reject) => {
+				const req = store.openCursor();
+				req.onsuccess = () => {
+					const cur = req.result;
+					if (!cur) { resolve(); return; }
+					const v = cur.value;
+					if (v?.fromPinId === pinId || v?.toPinId === pinId) {
+						try { cur.delete(); removed++; } catch { /* noop */ }
+					}
+					cur.continue();
+				};
+				req.onerror = () => reject(req.error || new Error('cascade cursor failed'));
+			});
+			await txDone(tx);
+			return removed;
+		} catch (e) {
+			reportError(e, 'db.cascadeDeleteLinksForPin');
+			return 0;
+		}
+	}
+
 	/**
 	 * Wipe all extension data.
 	 * [SECURITY] Used by the "Wipe all data" option. Confirmation handled in UI.
@@ -776,6 +874,11 @@
 		getPinByMessageUuid,
 		getPinsCount,
 		clearPins,
+		putLink,
+		deleteLink,
+		getAllLinks,
+		getLinksForPin,
+		cascadeDeleteLinksForPin,
 		logToDb,
 		wipe
 	};

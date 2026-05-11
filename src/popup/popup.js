@@ -17,7 +17,8 @@
 		OPEN_FORENSICS: 'open.forensics',
 		MESSAGES_FOR_CONVERSATION: 'messages.forConversation',
 		LIVE_STATE_GET: 'live.state.get',
-		COMPOSER_INSERT: 'composer.insert'
+		COMPOSER_INSERT: 'composer.insert',
+		OPEN_GRAPH: 'open.graph'
 	});
 
 	const MODEL_COLORS = Object.freeze({
@@ -752,7 +753,16 @@
 		bulkCopy: document.getElementById('cc-mem-bulk-copy'),
 		bulkExport: document.getElementById('cc-mem-bulk-export'),
 		bulkInsert: document.getElementById('cc-mem-bulk-insert'),
+		bulkLink: document.getElementById('cc-mem-bulk-link'),
 		bulkUnpin: document.getElementById('cc-mem-bulk-unpin'),
+		openGraph: document.getElementById('cc-mem-open-graph'),
+		// Link modal
+		linkModal: document.getElementById('cc-link-modal'),
+		linkClose: document.getElementById('cc-link-close'),
+		linkCancel: document.getElementById('cc-link-cancel'),
+		linkCreate: document.getElementById('cc-link-create'),
+		linkInput: document.getElementById('cc-link-input'),
+		linkBackdrop: document.getElementById('cc-link-backdrop'),
 		// Modal
 		modal: document.getElementById('cc-inject-modal'),
 		modalClose: document.getElementById('cc-inject-close'),
@@ -821,6 +831,33 @@
 				req.onsuccess = () => resolve(true);
 				req.onerror = () => resolve(false);
 			} catch { resolve(false); }
+		});
+	}
+
+	/**
+	 * Cascade-delete links referencing a pin. Runs from the popup context
+	 * directly against IndexedDB — mirrors db.cascadeDeleteLinksForPin since
+	 * content-script utils aren't reachable here.
+	 */
+	async function cascadeDeleteLinksForPin(pinId) {
+		const db = await openPinsDb();
+		if (!db || !db.objectStoreNames.contains('links')) return 0;
+		return new Promise((resolve) => {
+			let removed = 0;
+			try {
+				const tx = db.transaction('links', 'readwrite');
+				const req = tx.objectStore('links').openCursor();
+				req.onsuccess = () => {
+					const cur = req.result;
+					if (!cur) { resolve(removed); return; }
+					const v = cur.value;
+					if (v?.fromPinId === pinId || v?.toPinId === pinId) {
+						try { cur.delete(); removed++; } catch { /* noop */ }
+					}
+					cur.continue();
+				};
+				req.onerror = () => resolve(removed);
+			} catch { resolve(removed); }
 		});
 	}
 
@@ -1103,6 +1140,8 @@
 		const snapshot = JSON.parse(JSON.stringify(pin));
 		const ok = await deletePinById(pin.id);
 		if (!ok) return;
+		// Cascade-delete this pin's links (Phase 4). Undo restores only the pin.
+		await cascadeDeleteLinksForPin(pin.id);
 		// Optimistic removal from in-memory state.
 		memState.allPins = memState.allPins.filter((p) => p.id !== pin.id);
 		memState.selectedIds.delete(pin.id);
@@ -1124,6 +1163,8 @@
 		const selected = memState.selectedIds.size;
 		memRefs.bulk.hidden = selected === 0;
 		memRefs.bulkCount.textContent = `${selected} selected`;
+		// Link is pairwise only — enabled at exactly 2 selections.
+		if (memRefs.bulkLink) memRefs.bulkLink.disabled = selected !== 2;
 	}
 
 	function selectedPins() {
@@ -1150,7 +1191,10 @@
 		const ok = window.confirm(`Unpin ${memState.selectedIds.size} pin(s)? This cannot be undone after 10 seconds.`);
 		if (!ok) return;
 		const targets = selectedPins();
-		for (const p of targets) await deletePinById(p.id);
+		for (const p of targets) {
+			await deletePinById(p.id);
+			await cascadeDeleteLinksForPin(p.id);
+		}
 		memState.selectedIds.clear();
 		await refreshMemory();
 		showInlineToast(`Unpinned ${targets.length} pin${targets.length === 1 ? '' : 's'}`);
@@ -1159,6 +1203,68 @@
 	memRefs.bulkExport?.addEventListener('click', () => exportPins(selectedPins()));
 
 	memRefs.bulkInsert?.addEventListener('click', () => openInsertPreview(selectedPins()));
+
+	memRefs.bulkLink?.addEventListener('click', () => {
+		const sel = selectedPins();
+		if (sel.length !== 2) return;
+		openLinkModal(sel[0], sel[1]);
+	});
+
+	memRefs.openGraph?.addEventListener('click', async () => {
+		await send(KIND.OPEN_GRAPH);
+		try { window.close(); } catch { /* noop */ }
+	});
+
+	// ---------- Link modal ----------
+
+	let pendingLinkPair = null;
+
+	function openLinkModal(a, b) {
+		pendingLinkPair = [a, b];
+		if (memRefs.linkInput) memRefs.linkInput.value = '';
+		if (memRefs.linkModal) memRefs.linkModal.hidden = false;
+		setTimeout(() => memRefs.linkInput?.focus(), 0);
+	}
+
+	function closeLinkModal() {
+		pendingLinkPair = null;
+		if (memRefs.linkModal) memRefs.linkModal.hidden = true;
+	}
+
+	memRefs.linkClose?.addEventListener('click', closeLinkModal);
+	memRefs.linkCancel?.addEventListener('click', closeLinkModal);
+	memRefs.linkBackdrop?.addEventListener('click', closeLinkModal);
+
+	memRefs.linkCreate?.addEventListener('click', async () => {
+		if (!pendingLinkPair) { closeLinkModal(); return; }
+		const [a, b] = pendingLinkPair;
+		const label = (memRefs.linkInput?.value || '').trim();
+		const link = {
+			id: (globalThis.crypto?.randomUUID?.()) || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+			fromPinId: a.id,
+			toPinId: b.id,
+			label,
+			createdAt: Date.now(),
+			weight: 1,
+			kind: 'manual'
+		};
+		await writeLink(link);
+		closeLinkModal();
+		showInlineToast(label ? `Linked: ${label}` : 'Linked');
+	});
+
+	async function writeLink(link) {
+		const db = await openPinsDb();
+		if (!db || !db.objectStoreNames.contains('links')) return false;
+		return new Promise((resolve) => {
+			try {
+				const tx = db.transaction('links', 'readwrite');
+				const req = tx.objectStore('links').put(link);
+				req.onsuccess = () => resolve(true);
+				req.onerror = () => resolve(false);
+			} catch { resolve(false); }
+		});
+	}
 
 	// ---------- Export to ZIP (Obsidian-flavored markdown) ----------
 

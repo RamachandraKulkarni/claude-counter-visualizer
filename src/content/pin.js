@@ -288,6 +288,15 @@
 			if (CC.ui?.showToast) CC.ui.showToast('Unpin failed.');
 			return false;
 		}
+		// [SECURITY] Cascade: a deleted pin's manual links become dangling and
+		// must go too. Decision: undo-pin does NOT auto-restore links — keeps
+		// the cascade simple and matches PHASE_4 P4.2.5.
+		let linksRemoved = 0;
+		if (db?.cascadeDeleteLinksForPin) {
+			try { linksRemoved = await db.cascadeDeleteLinksForPin(existing.id); }
+			catch (e) { if (errs?.warn) errs.warn('pin.unpin.cascadeLinks failed', { error: e?.message }); }
+		}
+		void linksRemoved;
 		pinnedByUuid.delete(uuid);
 		applyIconState(btn, false);
 		applyPinnedClass(container, false, null);

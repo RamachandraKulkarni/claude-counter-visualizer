@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<title>Claude Counter — Graph</title>
+	<link rel="stylesheet" href="graph.css">
+</head>
+<body class="cc-graph">
+	<header class="cc-gr-header">
+		<div class="cc-gr-title-row">
+			<h1>Pin graph</h1>
+			<a class="cc-gr-back" href="#" id="cc-gr-back" aria-label="Open the Claude Counter popup">memory ↗</a>
+		</div>
+		<div class="cc-gr-meta" id="cc-gr-meta" aria-live="polite">loading…</div>
+	</header>
+
+	<section class="cc-gr-toolbar" aria-label="Filters">
+		<input type="search" id="cc-gr-search" class="cc-gr-search" placeholder="search pin content…" aria-label="Search pins">
+		<select id="cc-gr-project" class="cc-gr-select" aria-label="Filter by chat">
+			<option value="">all chats</option>
+		</select>
+		<select id="cc-gr-tag" class="cc-gr-select" aria-label="Filter by tag">
+			<option value="">all tags</option>
+		</select>
+		<button type="button" id="cc-gr-reset" class="cc-gr-btn">reset view</button>
+		<button type="button" id="cc-gr-freeze" class="cc-gr-btn" aria-pressed="false">freeze layout</button>
+		<span class="cc-gr-stats" id="cc-gr-stats" aria-live="polite"></span>
+	</section>
+
+	<main class="cc-gr-main">
+		<div class="cc-gr-canvaswrap" id="cc-gr-canvaswrap">
+			<canvas id="cc-gr-canvas" tabindex="0" aria-label="Graph of pinned messages"></canvas>
+			<!-- Visually-hidden parallel structure for screen readers. -->
+			<ol class="cc-gr-sronly" id="cc-gr-sronly" aria-label="Pin nodes"></ol>
+
+			<!-- Floating action surface for link buffer -->
+			<div class="cc-gr-link-buffer" id="cc-gr-link-buffer" hidden role="status">
+				<span id="cc-gr-link-buffer-text">0 nodes in link buffer</span>
+				<button type="button" id="cc-gr-link-create">link these two</button>
+				<button type="button" id="cc-gr-link-clear">clear</button>
+			</div>
+
+			<!-- Clustered overview banner -->
+			<div class="cc-gr-clustered-banner" id="cc-gr-clustered-banner" hidden>
+				<span id="cc-gr-clustered-text">Showing clustered overview. Click a project to drill in.</span>
+				<button type="button" id="cc-gr-clustered-force" class="cc-gr-btn-link">force-load full graph</button>
+			</div>
+		</div>
+
+		<aside class="cc-gr-side" id="cc-gr-side" aria-label="Selected pin details">
+			<div class="cc-gr-side-empty" id="cc-gr-side-empty">
+				<p class="cc-gr-side-empty-text">// click a node to inspect</p>
+			</div>
+			<div class="cc-gr-side-detail" id="cc-gr-side-detail" hidden>
+				<header>
+					<span class="cc-gr-side-title" id="cc-gr-side-title">—</span>
+					<button type="button" id="cc-gr-side-close" aria-label="Close">✕</button>
+				</header>
+				<div class="cc-gr-side-row">
+					<span class="cc-gr-side-label">model</span>
+					<span class="cc-gr-side-value" id="cc-gr-side-model">—</span>
+				</div>
+				<div class="cc-gr-side-row">
+					<span class="cc-gr-side-label">date</span>
+					<span class="cc-gr-side-value" id="cc-gr-side-date">—</span>
+				</div>
+				<div class="cc-gr-side-row">
+					<span class="cc-gr-side-label">tokens</span>
+					<span class="cc-gr-side-value" id="cc-gr-side-tokens">—</span>
+				</div>
+				<div class="cc-gr-side-tags" id="cc-gr-side-tags"></div>
+				<div class="cc-gr-side-body" id="cc-gr-side-body"></div>
+				<div class="cc-gr-side-links" id="cc-gr-side-links">
+					<h3 class="cc-gr-side-section">// linked pins</h3>
+					<ul id="cc-gr-side-links-list"></ul>
+				</div>
+				<div class="cc-gr-side-actions">
+					<button type="button" id="cc-gr-side-copy">copy</button>
+					<button type="button" id="cc-gr-side-openchat">open chat</button>
+					<button type="button" id="cc-gr-side-linkfrom">link from here…</button>
+					<button type="button" id="cc-gr-side-unpin" class="cc-gr-btn-danger">unpin</button>
+				</div>
+			</div>
+		</aside>
+	</main>
+
+	<footer class="cc-gr-legend" aria-label="Legend">
+		<span><span class="cc-gr-swatch" style="background: var(--accent-cyan)"></span> cooccur</span>
+		<span><span class="cc-gr-swatch" style="background: var(--accent-yellow)"></span> tag</span>
+		<span><span class="cc-gr-swatch" style="background: var(--accent-mint)"></span> manual</span>
+		<span class="cc-gr-legend-spacer"></span>
+		<span class="cc-gr-legend-hint">drag to pan · wheel to zoom · shift-click to link</span>
+	</footer>
+
+	<!-- Link label modal -->
+	<div class="cc-gr-modal" id="cc-gr-label-modal" role="dialog" aria-modal="true" aria-labelledby="cc-gr-label-title" hidden>
+		<div class="cc-gr-modal-backdrop" id="cc-gr-label-backdrop"></div>
+		<div class="cc-gr-modal-body">
+			<header>
+				<h2 id="cc-gr-label-title">link label</h2>
+				<button type="button" id="cc-gr-label-close" aria-label="Close">✕</button>
+			</header>
+			<input type="text" id="cc-gr-label-input" placeholder="e.g. supersedes, related to, contradicts…" maxlength="200">
+			<footer>
+				<button type="button" id="cc-gr-label-cancel">cancel</button>
+				<button type="button" id="cc-gr-label-create" class="cc-gr-btn-mint">create</button>
+			</footer>
+		</div>
+	</div>
+
+	<script src="../vendor/cc-force.js"></script>
+	<script src="edges.js"></script>
+	<script src="graph.js"></script>
+</body>
+</html>

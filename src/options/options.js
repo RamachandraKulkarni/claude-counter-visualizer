@@ -42,6 +42,13 @@
 			autoTagModel: true,
 			defaultTags: [],
 			exportFormat: 'flat'
+		},
+		graph: {
+			forceLoadThreshold: 2000,
+			showCooccur: true,
+			showTag: true,
+			showManual: true,
+			palette: 'default'
 		}
 	};
 
@@ -157,6 +164,8 @@
 						if (parsed < 1 || parsed > 99) return;
 					} else if (path === 'history.retentionDays') {
 						if (parsed < 30 || parsed > 365) return;
+					} else if (path === 'graph.forceLoadThreshold') {
+						if (parsed < 500 || parsed > 5000) return;
 					}
 					value = parsed;
 				}

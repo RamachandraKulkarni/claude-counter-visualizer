@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Claude Counter",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "browser_specific_settings": {
     "gecko": {
       "id": "{236c6889-52b6-4454-bc4b-5a2ad18effa2}",
@@ -95,7 +95,13 @@
         "src/vendor/o200k_base.js",
         "src/forensics/index.html",
         "src/forensics/forensics.js",
-        "src/forensics/forensics.css"
+        "src/forensics/forensics.css",
+        "src/graph/index.html",
+        "src/graph/graph.js",
+        "src/graph/graph.css",
+        "src/graph/edges.js",
+        "src/vendor/cc-force.js",
+        "src/styles/tokens.css"
       ],
       "matches": [
         "https://claude.ai/*"

@@ -1,0 +1,318 @@
+/* ============================================================
+   Claude Counter — Design tokens
+   Adapted from rkulkarni.dev terminal palette.
+   Components reference these tokens; never hardcode hex.
+   ============================================================ */
+
+:root {
+	color-scheme: dark;
+
+	/* === Backgrounds (deepest → highest) === */
+	--bg-void:      #0a0e14;
+	--bg-base:      #0f141a;
+	--bg-panel:     #161b22;
+	--bg-elevated:  #1c2128;
+	--bg-selected:  #264f78;
+
+	/* === Foreground / text ramp === */
+	--fg-bright:    #f0f6fc;
+	--fg-primary:   #e6edf3;
+	--fg-secondary: #adbac7;
+	--fg-muted:     #768390;
+	--fg-comment:   #545d68;
+
+	/* === Semantic accents === */
+	--accent-cyan:    #79c0ff;
+	--accent-purple:  #d2a8ff;
+	--accent-green:   #7ee787;
+	--accent-yellow:  #f2cc60;
+	--accent-orange:  #ffa657;
+	--accent-pink:    #ff7b72;
+	--accent-mint:    #56d4dd;
+
+	/* === Borders === */
+	--border:        #30363d;
+	--border-bright: #484f58;
+
+	/* === Type families ===
+	   Extension pages cannot reliably pull Google Fonts under MV3 CSP,
+	   so we fall through to system stacks that still feel terminal-like. */
+	--font-sans:    "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--font-code:    "Geist Mono", "Berkeley Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+	--font-mono:    var(--font-code);
+	--font-display: "Silkscreen", "Departure Mono", var(--font-code);
+
+	/* === Spacing scale === */
+	--s-1: 4px;
+	--s-2: 8px;
+	--s-3: 12px;
+	--s-4: 16px;
+	--s-5: 24px;
+	--s-6: 32px;
+	--s-7: 48px;
+
+	/* === Radii === */
+	--radius-frame: 6px;
+	--radius-inner: 0px;
+	--radius-tag:   2px;
+
+	/* === Motion === */
+	--ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+	/* === Per-model color slots === */
+	--model-opus:    var(--accent-purple);
+	--model-sonnet:  var(--accent-cyan);
+	--model-haiku:   var(--accent-green);
+	--model-other:   var(--fg-muted);
+	--model-unknown: var(--fg-comment);
+
+	/* === Severity aliases (existing chip API) === */
+	--cc-good: var(--accent-green);
+	--cc-warn: var(--accent-yellow);
+	--cc-near: var(--accent-orange);
+	--cc-crit: var(--accent-pink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	* { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+::selection { background: var(--bg-selected); color: var(--fg-bright); }
+
+/* ============================================================
+   Shared primitives — panels, tags, rules, kbd, leader rows,
+   ASCII bars. Each extension page composes on top of these.
+   ============================================================ */
+
+.cc-panel {
+	border: 1px solid var(--border);
+	background: var(--bg-panel);
+	font-family: var(--font-code);
+	display: flex;
+	flex-direction: column;
+}
+
+.cc-panel-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--s-2) var(--s-3);
+	border-bottom: 1px solid var(--border);
+	background: var(--bg-base);
+	font-size: 11px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--fg-secondary);
+	min-height: 32px;
+}
+
+.cc-panel-title { display: flex; align-items: baseline; gap: 6px; }
+.cc-panel-title-bracket { color: var(--fg-comment); }
+.cc-panel-title-name { color: var(--fg-bright); font-weight: 600; }
+.cc-panel-title-tag {
+	color: var(--accent-mint);
+	text-transform: lowercase;
+	letter-spacing: 0;
+	font-size: 10px;
+}
+
+.cc-panel-header-actions {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+	font-size: 10px;
+	color: var(--fg-muted);
+	text-transform: none;
+	letter-spacing: 0;
+}
+
+.cc-panel-body {
+	padding: var(--s-3);
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-3);
+}
+.cc-panel-body--tight { padding: 10px; gap: 8px; }
+.cc-panel-body--flush { padding: 0; }
+
+/* === Tags / chips ======================================= */
+.cc-tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-family: var(--font-code);
+	font-size: 10px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	padding: 2px 6px;
+	border-radius: var(--radius-tag);
+	background: var(--bg-elevated);
+	color: var(--fg-secondary);
+	border: 1px solid var(--border);
+	white-space: nowrap;
+}
+
+.cc-tag--ok    { color: var(--accent-green);  border-color: color-mix(in srgb, var(--accent-green)  30%, var(--border)); }
+.cc-tag--info  { color: var(--accent-cyan);   border-color: color-mix(in srgb, var(--accent-cyan)   30%, var(--border)); }
+.cc-tag--warn  { color: var(--accent-yellow); border-color: color-mix(in srgb, var(--accent-yellow) 30%, var(--border)); }
+.cc-tag--near  { color: var(--accent-orange); border-color: color-mix(in srgb, var(--accent-orange) 30%, var(--border)); }
+.cc-tag--crit  { color: var(--accent-pink);   border-color: color-mix(in srgb, var(--accent-pink)   30%, var(--border)); }
+.cc-tag--mint  { color: var(--accent-mint);   border-color: color-mix(in srgb, var(--accent-mint)   30%, var(--border)); }
+.cc-tag--purple{ color: var(--accent-purple); border-color: color-mix(in srgb, var(--accent-purple) 30%, var(--border)); }
+
+/* Severity dot prefix */
+.cc-dot {
+	display: inline-block;
+	width: 7px;
+	height: 7px;
+	border-radius: 999px;
+	background: var(--fg-comment);
+	margin-right: 6px;
+	vertical-align: 1px;
+	flex: 0 0 auto;
+}
+.cc-dot--ok    { background: var(--accent-green); }
+.cc-dot--info  { background: var(--accent-cyan); }
+.cc-dot--warn  { background: var(--accent-yellow); }
+.cc-dot--near  { background: var(--accent-orange); }
+.cc-dot--crit  { background: var(--accent-pink); }
+.cc-dot--mint  { background: var(--accent-mint); }
+.cc-dot--purple{ background: var(--accent-purple); }
+
+/* === Section divider ascii rule ========================= */
+.cc-rule {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--fg-comment);
+	font-family: var(--font-code);
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+.cc-rule-line { flex: 1; border-top: 1px solid var(--border); }
+.cc-rule-title { color: var(--fg-secondary); }
+
+/* === Comment line ======================================= */
+.cc-comment {
+	color: var(--fg-comment);
+	font-style: italic;
+	font-size: 11px;
+	font-family: var(--font-code);
+}
+
+/* === Leader rows ======================================== */
+.cc-leader {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	font-family: var(--font-code);
+}
+.cc-leader-label { color: var(--fg-muted); }
+.cc-leader-dots {
+	flex: 1;
+	border-bottom: 1px dotted var(--border-bright);
+	margin: 0 4px;
+	transform: translateY(-3px);
+}
+.cc-leader-value { color: var(--fg-bright); }
+
+/* === KBD chip =========================================== */
+kbd.cc-kbd, kbd {
+	display: inline-block;
+	padding: 1px 5px;
+	border: 1px solid var(--border);
+	border-bottom-width: 2px;
+	border-radius: 2px;
+	background: var(--bg-base);
+	color: var(--fg-secondary);
+	font-family: var(--font-code);
+	font-size: 10px;
+	letter-spacing: 0;
+}
+
+/* === Buttons ============================================ */
+.cc-btn {
+	font-family: var(--font-code);
+	font-size: 11px;
+	background: var(--bg-base);
+	border: 1px solid var(--border);
+	color: var(--fg-primary);
+	padding: 5px 10px;
+	cursor: pointer;
+	letter-spacing: 0.02em;
+	border-radius: 0;
+}
+.cc-btn:hover { background: var(--bg-elevated); color: var(--fg-bright); }
+.cc-btn:focus-visible { outline: 1px solid var(--accent-mint); outline-offset: 2px; }
+.cc-btn[data-active="true"] {
+	background: var(--bg-elevated);
+	color: var(--accent-mint);
+	border-color: var(--accent-mint);
+}
+.cc-btn--mint {
+	border-color: color-mix(in srgb, var(--accent-mint) 60%, var(--border));
+	color: var(--accent-mint);
+}
+.cc-btn--mint:hover { background: color-mix(in srgb, var(--accent-mint) 10%, var(--bg-elevated)); }
+.cc-btn-danger,
+.cc-btn--danger {
+	color: var(--accent-pink);
+	border-color: color-mix(in srgb, var(--accent-pink) 35%, var(--border));
+}
+.cc-btn-danger:hover,
+.cc-btn--danger:hover { background: color-mix(in srgb, var(--accent-pink) 10%, var(--bg-elevated)); }
+
+/* === Bignum ============================================= */
+.cc-bignum {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	font-family: var(--font-code);
+}
+.cc-bignum-value {
+	font-size: 28px;
+	line-height: 1;
+	letter-spacing: -0.02em;
+	color: var(--fg-bright);
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+}
+.cc-bignum-value--accent { color: var(--accent-mint); }
+.cc-bignum-value--warn   { color: var(--accent-yellow); }
+.cc-bignum-value--near   { color: var(--accent-orange); }
+.cc-bignum-value--crit   { color: var(--accent-pink); }
+.cc-bignum-unit {
+	font-size: 13px;
+	color: var(--fg-comment);
+	margin-left: 6px;
+	font-weight: 400;
+}
+.cc-bignum-label {
+	font-size: 10px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--fg-muted);
+}
+.cc-bignum-sub {
+	font-size: 11px;
+	color: var(--fg-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+/* === Common focus ring ================================= */
+:focus-visible {
+	outline: 1px solid var(--accent-mint);
+	outline-offset: 2px;
+}
+
+/* === Common link ======================================= */
+a {
+	color: var(--accent-mint);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+a:hover { background: var(--bg-elevated); }
+a:visited { opacity: 0.85; }

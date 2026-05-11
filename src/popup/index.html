@@ -8,15 +8,19 @@
 </head>
 <body class="cc-popup">
 	<header class="cc-popup-header">
-		<div class="cc-popup-title">
-			<span class="cc-popup-name">Claude Counter</span>
-			<span class="cc-popup-version" id="cc-version" aria-label="Version">v0.7.0</span>
+		<div class="cc-popup-titlebar">
+			<div class="cc-popup-titlebar-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+			<div class="cc-popup-title">
+				<span class="cc-popup-name">cc</span>
+				<span>— claude counter</span>
+				<span class="cc-popup-version" id="cc-version" aria-label="Version">v0.7.0</span>
+			</div>
 		</div>
-		<nav class="cc-tabs" role="tablist" aria-label="Sections">
-			<button type="button" class="cc-tab cc-tab--active" id="cc-tab-dashboard-btn" role="tab" aria-selected="true" aria-controls="cc-tab-dashboard">Dashboard</button>
-			<button type="button" class="cc-tab" id="cc-tab-memory-btn" role="tab" aria-selected="false" aria-controls="cc-tab-memory">Memory <span class="cc-tab-badge" id="cc-pin-count" hidden></span></button>
-		</nav>
 		<div class="cc-popup-stale" id="cc-stale" hidden></div>
+		<nav class="cc-tabs" role="tablist" aria-label="Sections">
+			<button type="button" class="cc-tab cc-tab--active" id="cc-tab-dashboard-btn" role="tab" aria-selected="true" aria-controls="cc-tab-dashboard">dashboard</button>
+			<button type="button" class="cc-tab" id="cc-tab-memory-btn" role="tab" aria-selected="false" aria-controls="cc-tab-memory">memory <span class="cc-tab-badge" id="cc-pin-count" hidden></span></button>
+		</nav>
 	</header>
 
 	<main class="cc-popup-main" role="main" id="cc-tab-dashboard">
@@ -168,15 +172,37 @@
 			</div>
 		</div>
 
+		<div class="cc-mem-graph-row">
+			<button type="button" id="cc-mem-open-graph" class="cc-btn">open graph view →</button>
+		</div>
+
 		<footer class="cc-mem-bulk" id="cc-mem-bulk" hidden>
 			<span class="cc-mem-bulk-count" id="cc-mem-bulk-count">0 selected</span>
 			<div class="cc-mem-bulk-actions">
 				<button type="button" id="cc-mem-bulk-copy">Copy</button>
 				<button type="button" id="cc-mem-bulk-export">Export</button>
 				<button type="button" id="cc-mem-bulk-insert">Insert</button>
+				<button type="button" id="cc-mem-bulk-link" disabled>Link</button>
 				<button type="button" id="cc-mem-bulk-unpin" class="cc-btn-danger">Unpin</button>
 			</div>
 		</footer>
+
+		<!-- Link label modal (popup-side) -->
+		<div class="cc-modal" id="cc-link-modal" role="dialog" aria-modal="true" aria-labelledby="cc-link-title" hidden>
+			<div class="cc-modal-backdrop" id="cc-link-backdrop"></div>
+			<div class="cc-modal-body" tabindex="-1">
+				<header class="cc-modal-header">
+					<h2 id="cc-link-title">Link two pins</h2>
+					<button type="button" id="cc-link-close" aria-label="Close">✕</button>
+				</header>
+				<div class="cc-modal-meta" id="cc-link-meta">Optional label (e.g. "supersedes", "related to")</div>
+				<input type="text" id="cc-link-input" placeholder="(no label)" maxlength="200" style="width:100%;padding:6px 10px;background:var(--bg-base);color:var(--fg-bright);border:1px solid var(--border);font-family:var(--font-code);font-size:12px;">
+				<footer class="cc-modal-actions">
+					<button type="button" id="cc-link-cancel">Cancel</button>
+					<button type="button" id="cc-link-create" class="cc-mem-primary">Create link</button>
+				</footer>
+			</div>
+		</div>
 	</main>
 
 	<!-- Re-injection preview modal (F14) -->
