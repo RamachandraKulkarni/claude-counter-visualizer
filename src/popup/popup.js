@@ -18,15 +18,16 @@
 		MESSAGES_FOR_CONVERSATION: 'messages.forConversation',
 		LIVE_STATE_GET: 'live.state.get',
 		COMPOSER_INSERT: 'composer.insert',
-		OPEN_GRAPH: 'open.graph'
+		OPEN_GRAPH: 'open.graph',
+		EMBED_QUERY: 'embed.query'
 	});
 
 	const MODEL_COLORS = Object.freeze({
-		opus: '#b04df0',
-		sonnet: '#2c84db',
-		haiku: '#4a9b5f',
-		other: '#8a8a87',
-		unknown: 'rgba(140,140,140,0.5)'
+		opus: 'var(--model-opus)',
+		sonnet: 'var(--model-sonnet)',
+		haiku: 'var(--model-haiku)',
+		other: 'var(--model-other)',
+		unknown: 'var(--model-unknown)'
 	});
 
 	const MODEL_LABELS = Object.freeze({
@@ -158,6 +159,28 @@
 		if (pct >= 95) elBar.classList.add('cc-crit');
 		else if (pct >= 90) elBar.classList.add('cc-near');
 		else if (pct >= 75) elBar.classList.add('cc-warn');
+	}
+
+	function renderStatusBar(snapshot) {
+		const modeEl = document.getElementById('cc-statusbar-mode');
+		const ctxEl = document.getElementById('cc-statusbar-ctx');
+		if (!modeEl || !ctxEl) return;
+		modeEl.classList.remove('cc-statusbar-mode--warn', 'cc-statusbar-mode--near', 'cc-statusbar-mode--crit');
+		if (!snapshot) {
+			modeEl.textContent = '─COLD─';
+			ctxEl.textContent = 'ctx —';
+			return;
+		}
+		const sessionPct = typeof snapshot.sessionPct === 'number' ? snapshot.sessionPct : 0;
+		const weeklyPct = typeof snapshot.weeklyPct === 'number' ? snapshot.weeklyPct : 0;
+		const ctxPct = typeof snapshot.contextPct === 'number' ? snapshot.contextPct : 0;
+		const peak = Math.max(sessionPct, weeklyPct, ctxPct);
+		let label = '─NORMAL─';
+		if (peak >= 95) { modeEl.classList.add('cc-statusbar-mode--crit'); label = '─CRIT─'; }
+		else if (peak >= 90) { modeEl.classList.add('cc-statusbar-mode--near'); label = '─NEAR─'; }
+		else if (peak >= 75) { modeEl.classList.add('cc-statusbar-mode--warn'); label = '─WARN─'; }
+		modeEl.textContent = label;
+		ctxEl.textContent = `ctx ${Math.round(ctxPct)}% · ses ${Math.round(sessionPct)}% · wk ${Math.round(weeklyPct)}%`;
 	}
 
 	function setHealthChip(elChip, health) {
@@ -551,9 +574,11 @@
 			refs.sessionPct.textContent = '—';
 			refs.weeklyPct.textContent = '—';
 			refs.burnRate.textContent = '—';
+			renderStatusBar(null);
 			return;
 		}
 		const s = state.snapshot;
+		renderStatusBar(s);
 
 		// Now card
 		if ('number' === typeof s.contextTokens) {
@@ -1008,7 +1033,7 @@
 	}
 
 	const MODEL_LABEL_SHORT = { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku', unknown: '·', other: '·' };
-	const MODEL_COLOR_MEM = { opus: '#b04df0', sonnet: '#2c84db', haiku: '#4a9b5f', other: '#8a8a87', unknown: 'rgba(140,140,140,0.5)' };
+	const MODEL_COLOR_MEM = { opus: 'var(--model-opus)', sonnet: 'var(--model-sonnet)', haiku: 'var(--model-haiku)', other: 'var(--model-other)', unknown: 'var(--model-unknown)' };
 
 	function renderPinList() {
 		const filtered = applyFilters(memState.allPins);
@@ -1022,7 +1047,7 @@
 		for (const pin of slice) list.appendChild(buildPinRow(pin));
 		if (filtered.length > MEM_VIRTUAL_CAP) {
 			const more = document.createElement('li');
-			more.style.color = 'var(--cc-text-muted)';
+			more.style.color = 'var(--fg-muted)';
 			more.style.fontSize = '11px';
 			more.style.textAlign = 'center';
 			more.style.padding = '8px';
@@ -1452,7 +1477,7 @@
 		})();
 		const node = document.createElement('div');
 		node.setAttribute('role', 'status');
-		node.style.cssText = 'background:var(--cc-bg-card);color:var(--cc-text);border:1px solid var(--cc-border);padding:6px 12px;border-radius:8px;font-size:11px;box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:auto;display:flex;align-items:center;gap:8px;';
+		node.style.cssText = 'background:var(--bg-panel);color:var(--fg-primary);border:1px solid var(--accent-mint);padding:6px 12px;border-radius:0;font-family:var(--font-code);font-size:10px;letter-spacing:0.04em;text-transform:uppercase;pointer-events:auto;display:flex;align-items:center;gap:8px;';
 		const span = document.createElement('span');
 		span.textContent = text;
 		node.appendChild(span);
@@ -1463,7 +1488,7 @@
 			const btn = document.createElement('button');
 			btn.type = 'button';
 			btn.textContent = opts.actionLabel;
-			btn.style.cssText = 'background:transparent;border:1px solid var(--cc-border);color:inherit;border-radius:4px;padding:2px 8px;font:inherit;font-size:10px;cursor:pointer;';
+			btn.style.cssText = 'background:var(--bg-base);border:1px solid var(--border);color:var(--accent-mint);border-radius:0;padding:2px 8px;font-family:var(--font-code);font-size:10px;letter-spacing:0.04em;text-transform:lowercase;cursor:pointer;';
 			btn.addEventListener('click', () => { try { opts.onAction(); } catch { /* noop */ } remove(); });
 			node.appendChild(btn);
 		}
@@ -1477,5 +1502,202 @@
 	memRefs.search?.addEventListener('input', () => { renderPinList(); renderActiveFilterChips(); });
 	memRefs.project?.addEventListener('change', () => { renderPinList(); renderActiveFilterChips(); });
 	memRefs.range?.addEventListener('change', () => { renderPinList(); renderActiveFilterChips(); });
+
+	// =====================================================================
+	// Phase 5 — semantic search toggle + Similar pins in expanded rows
+	// =====================================================================
+
+	const phase5 = {
+		mode: 'literal',
+		semanticEnabled: false,
+		semanticScoresById: new Map(),
+		queryVec: null
+	};
+
+	const searchModeBtn = document.getElementById('cc-mem-search-mode');
+
+	function updateSemanticAvailability(settings) {
+		const enabled = !!settings?.memory?.embeddingsEnabled;
+		phase5.semanticEnabled = enabled;
+		if (!searchModeBtn) return;
+		searchModeBtn.disabled = !enabled;
+		searchModeBtn.title = enabled
+			? 'Toggle between literal and semantic search'
+			: 'Enable embeddings in options first';
+		if (!enabled && phase5.mode === 'semantic') {
+			phase5.mode = 'literal';
+			searchModeBtn.dataset.mode = 'literal';
+			searchModeBtn.textContent = 'literal';
+		}
+	}
+
+	send(KIND.SETTINGS_GET).then((res) => updateSemanticAvailability(res?.settings));
+
+	function cosineLocal(a, b) {
+		if (!a || !b || a.length !== b.length) return 0;
+		let dot = 0, na = 0, nb = 0;
+		for (let i = 0; i < a.length; i++) {
+			dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i];
+		}
+		const d = Math.sqrt(na) * Math.sqrt(nb);
+		return d === 0 ? 0 : dot / d;
+	}
+
+	async function refreshSemantic() {
+		const query = (memRefs.search?.value || '').trim();
+		phase5.semanticScoresById.clear();
+		if (!query) { phase5.queryVec = null; return; }
+		try {
+			const mgr = globalThis.ClaudeCounter?.embedding;
+			if (!mgr?.embed) {
+				phase5.queryVec = null;
+				showInlineToast('Embedding runtime not loaded.');
+				return;
+			}
+			const vec = await mgr.embed(query);
+			if (!vec) {
+				phase5.queryVec = null;
+				showInlineToast('Semantic search unavailable.');
+				return;
+			}
+			phase5.queryVec = vec instanceof Float32Array ? vec : new Float32Array(vec);
+			for (const p of memState.allPins) {
+				if (!p.embedding) continue;
+				const v = p.embedding instanceof Float32Array ? p.embedding : new Float32Array(p.embedding);
+				phase5.semanticScoresById.set(p.id, cosineLocal(phase5.queryVec, v));
+			}
+		} catch { phase5.queryVec = null; }
+	}
+
+	if (searchModeBtn) {
+		searchModeBtn.addEventListener('click', async () => {
+			if (!phase5.semanticEnabled) return;
+			phase5.mode = phase5.mode === 'semantic' ? 'literal' : 'semantic';
+			searchModeBtn.dataset.mode = phase5.mode;
+			searchModeBtn.textContent = phase5.mode;
+			if (phase5.mode === 'semantic') await refreshSemantic();
+			else { phase5.semanticScoresById.clear(); phase5.queryVec = null; }
+			renderPinList();
+		});
+	}
+	memRefs.search?.addEventListener('input', async () => {
+		if (phase5.mode !== 'semantic') return;
+		await refreshSemantic();
+		renderPinList();
+	});
+
+	// Wrap applyFilters: in semantic mode, rank by cosine and skip text search.
+	const _applyFiltersOriginal = applyFilters;
+	applyFilters = function (pins) {
+		if (phase5.mode === 'semantic' && phase5.queryVec) {
+			const project = memRefs.project.value;
+			const range = memRefs.range.value;
+			const tags = memState.selectedTags;
+			let lowerTs = -Infinity;
+			const now = Date.now();
+			if (range === 'today') { const d = new Date(); d.setHours(0,0,0,0); lowerTs = d.getTime(); }
+			else if (range === '7d') lowerTs = now - 7 * 86_400_000;
+			else if (range === '30d') lowerTs = now - 30 * 86_400_000;
+			const out = [];
+			for (const p of pins) {
+				if (lowerTs > -Infinity && !(p.createdAt >= lowerTs)) continue;
+				if (project && p.conversationId !== project) continue;
+				if (tags.size > 0) {
+					let ok = true; for (const t of tags) if (!(p.tags || []).includes(t)) { ok = false; break; }
+					if (!ok) continue;
+				}
+				const s = phase5.semanticScoresById.get(p.id);
+				if (typeof s !== 'number' || s < 0.4) continue;
+				out.push(p);
+			}
+			out.sort((a, b) => (phase5.semanticScoresById.get(b.id) || 0) - (phase5.semanticScoresById.get(a.id) || 0));
+			return out;
+		}
+		return _applyFiltersOriginal(pins);
+	};
+
+	// Wrap buildPinRow: append "Similar pins" subsection when expanded, add
+	// inline score in semantic mode.
+	const _buildPinRowOriginal = buildPinRow;
+	buildPinRow = function (pin) {
+		const li = _buildPinRowOriginal(pin);
+		if (phase5.mode === 'semantic' && phase5.semanticScoresById.has(pin.id)) {
+			const meta = li.querySelector('.cc-mem-row-meta');
+			if (meta) {
+				const span = document.createElement('span');
+				span.className = 'cc-mem-row-score';
+				const score = phase5.semanticScoresById.get(pin.id);
+				span.textContent = ` · ${(Math.round(score * 100) / 100).toFixed(2)}`;
+				meta.appendChild(span);
+			}
+		}
+		if (memState.expandedIds.has(pin.id) && pin.embedding) {
+			appendSimilarSubsection(li, pin);
+		} else if (pin.embedding) {
+			// Wire lazy injection when user expands later.
+			const body = li.querySelector('.cc-mem-row-body');
+			body?.addEventListener('click', () => setTimeout(() => {
+				if (memState.expandedIds.has(pin.id) && !li.querySelector('.cc-mem-row-similar')) {
+					appendSimilarSubsection(li, pin);
+				}
+			}, 0));
+		}
+		return li;
+	};
+
+	function appendSimilarSubsection(li, pin) {
+		const wrap = document.createElement('div');
+		wrap.className = 'cc-mem-row-similar';
+		const head = document.createElement('div');
+		head.className = 'cc-mem-row-similar-head';
+		head.textContent = 'similar pins';
+		wrap.appendChild(head);
+
+		const list = document.createElement('ul');
+		list.className = 'cc-mem-row-similar-list';
+
+		const target = pin.embedding instanceof Float32Array
+			? pin.embedding : new Float32Array(pin.embedding);
+
+		const scored = [];
+		for (const p of memState.allPins) {
+			if (p.id === pin.id || !p.embedding) continue;
+			const v = p.embedding instanceof Float32Array ? p.embedding : new Float32Array(p.embedding);
+			const s = cosineLocal(target, v);
+			if (s >= 0.5) scored.push({ pin: p, score: s });
+		}
+		scored.sort((a, b) => b.score - a.score);
+		const top5 = scored.slice(0, 5);
+
+		if (top5.length === 0) {
+			const empty = document.createElement('li');
+			empty.className = 'cc-mem-row-similar-empty';
+			empty.textContent = 'no semantically-close pins found';
+			list.appendChild(empty);
+		} else {
+			for (const { pin: p, score } of top5) {
+				const row = document.createElement('li');
+				const s = document.createElement('span');
+				s.className = 'cc-mem-row-similar-score';
+				s.textContent = (Math.round(score * 100) / 100).toFixed(2);
+				const t = document.createElement('span');
+				t.className = 'cc-mem-row-similar-title';
+				t.textContent = `${p.chatTitle || '(untitled)'} — ${(p.content || '').slice(0, 60)}`;
+				t.addEventListener('click', () => {
+					if (!memState.expandedIds.has(p.id)) memState.expandedIds.add(p.id);
+					renderPinList();
+					setTimeout(() => {
+						const target = memRefs.list.querySelector(`[data-id="${p.id}"]`);
+						target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+					}, 30);
+				});
+				row.appendChild(s);
+				row.appendChild(t);
+				list.appendChild(row);
+			}
+		}
+		wrap.appendChild(list);
+		li.appendChild(wrap);
+	}
 
 })();

@@ -107,6 +107,81 @@
 			</div>
 		</section>
 
+		<section class="cc-section" aria-labelledby="cc-sec-embeddings">
+			<h2 id="cc-sec-embeddings">Embeddings <span class="cc-pill">experimental</span></h2>
+			<p class="cc-help">Run a small model locally to surface semantically-similar pins and enable semantic search. Strictly opt-in. Pins and vectors never leave this browser.</p>
+
+			<label><input type="checkbox" data-setting="memory.embeddingsEnabled" id="cc-emb-enabled"> Enable embeddings</label>
+
+			<div id="cc-emb-status" class="cc-row-label" style="margin-top: 10px;">
+				<span class="cc-label">Status</span>
+				<span id="cc-emb-status-text">disabled</span>
+			</div>
+
+			<div id="cc-emb-controls" hidden style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+				<div class="cc-row-label">
+					<span class="cc-label">Backfill</span>
+					<span id="cc-emb-backfill-count">— pins embedded</span>
+					<button type="button" class="cc-btn" id="cc-emb-backfill-start">backfill remaining</button>
+					<button type="button" class="cc-btn" id="cc-emb-backfill-cancel" hidden>cancel</button>
+				</div>
+
+				<div id="cc-emb-backfill-progress" hidden>
+					<div class="cc-bar" style="height: 8px;">
+						<div class="cc-bar-fill" id="cc-emb-backfill-fill"></div>
+					</div>
+					<span class="cc-status" id="cc-emb-backfill-eta">—</span>
+				</div>
+
+				<p class="cc-help" style="margin-top: 14px;">Suggestion tuning:</p>
+				<label class="cc-row-label">Top-K
+					<input type="number" min="1" max="20" step="1" data-setting="memory.suggestTopK">
+				</label>
+				<label class="cc-row-label">Threshold
+					<input type="number" min="0.30" max="0.95" step="0.05" data-setting="memory.suggestThreshold">
+					<span class="cc-status">0.30–0.95 (higher = stricter)</span>
+				</label>
+				<label><input type="checkbox" data-setting="memory.suggestCrossChatOnly"> Cross-chat only</label>
+
+				<div class="cc-row-label" style="margin-top: 10px;">
+					<span class="cc-label">Rejections</span>
+					<span id="cc-emb-rejection-count">0 recorded</span>
+					<button type="button" class="cc-btn" id="cc-emb-clear-rejections">clear all</button>
+				</div>
+
+				<p class="cc-help" style="margin-top: 14px;">About:</p>
+				<div class="cc-diagnostics" id="cc-emb-about">runtime: — · model: — · dim: —</div>
+
+				<div class="cc-row-label" style="margin-top: 10px;">
+					<button type="button" class="cc-btn cc-btn-danger" id="cc-emb-purge">disable &amp; remove vectors</button>
+				</div>
+			</div>
+		</section>
+
+		<!-- First-use modal -->
+		<div id="cc-emb-modal" class="cc-emb-modal" role="dialog" aria-modal="true" aria-labelledby="cc-emb-modal-title" hidden>
+			<div class="cc-emb-modal-backdrop" id="cc-emb-modal-backdrop"></div>
+			<div class="cc-emb-modal-body" tabindex="-1">
+				<header>
+					<h2 id="cc-emb-modal-title">Enable local embeddings</h2>
+				</header>
+				<div class="cc-emb-modal-content">
+					<p>This will run a small AI model in your browser to surface semantically-related pins.</p>
+					<ul>
+						<li>One-time ~32MB model download (or instant if shipping with the shim).</li>
+						<li>Pin content stays in your browser — never sent over the network.</li>
+						<li>About ~1.5 KB extra storage per pin for the vector.</li>
+						<li><strong>Experimental.</strong> Behavior may change.</li>
+					</ul>
+					<p class="cc-help" id="cc-emb-modal-runtime-hint"></p>
+				</div>
+				<footer>
+					<button type="button" id="cc-emb-modal-cancel">cancel</button>
+					<button type="button" id="cc-emb-modal-confirm" class="cc-btn-mint">enable</button>
+				</footer>
+			</div>
+		</div>
+
 		<section class="cc-section" aria-labelledby="cc-sec-graph">
 			<h2 id="cc-sec-graph">Graph</h2>
 			<p class="cc-help">Visualize pinned messages as a network. Above the force-load threshold the view collapses into a clustered overview.</p>
@@ -148,6 +223,8 @@
 
 	<div class="cc-saved" id="cc-saved" role="status" aria-live="polite" hidden>Saved.</div>
 
+	<script src="../lib/similarity.js"></script>
+	<script src="../lib/embedding-manager.js"></script>
 	<script src="options.js"></script>
 </body>
 </html>

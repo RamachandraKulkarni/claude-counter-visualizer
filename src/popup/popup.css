@@ -463,6 +463,39 @@ body.cc-popup {
 .cc-color-other   { background-color: var(--model-other); }
 .cc-color-unknown { background-color: var(--model-unknown); opacity: 0.6; }
 
+/* === Status bar (vim/tmux) ============================= */
+.cc-statusbar {
+	display: flex;
+	align-items: stretch;
+	gap: 0;
+	background: var(--bg-panel);
+	border-top: 1px solid var(--border);
+	font-family: var(--font-code);
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	height: 22px;
+}
+.cc-statusbar-cell {
+	padding: 0 10px;
+	display: flex;
+	align-items: center;
+	border-right: 1px solid var(--border);
+	color: var(--fg-muted);
+	white-space: nowrap;
+}
+.cc-statusbar-cell:last-child { border-right: 0; }
+.cc-statusbar-cell--push { margin-left: auto; }
+.cc-statusbar-mode {
+	background: var(--accent-mint);
+	color: var(--bg-void);
+	font-weight: 700;
+	padding: 0 12px;
+}
+.cc-statusbar-mode.cc-statusbar-mode--warn { background: var(--accent-yellow); }
+.cc-statusbar-mode.cc-statusbar-mode--near { background: var(--accent-orange); }
+.cc-statusbar-mode.cc-statusbar-mode--crit { background: var(--accent-pink); }
+.cc-statusbar-exit-ok { color: var(--accent-green); margin-left: 2px; }
+
 /* === Footer ============================================ */
 .cc-popup-footer {
 	display: flex;
@@ -513,6 +546,47 @@ body.cc-popup {
 .cc-mem { padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--bg-void); }
 
 .cc-mem-filters { display: flex; flex-direction: column; gap: 6px; }
+
+.cc-mem-search-row { display: flex; gap: 6px; align-items: stretch; }
+.cc-mem-search-row .cc-mem-search { flex: 1; min-width: 0; }
+
+.cc-mem-search-mode {
+	background: var(--bg-panel);
+	border: 1px solid var(--border);
+	color: var(--fg-muted);
+	font-family: var(--font-code);
+	font-size: 10px;
+	letter-spacing: 0.06em;
+	text-transform: lowercase;
+	padding: 0 10px;
+	cursor: pointer;
+	border-radius: 0;
+	min-width: 70px;
+	white-space: nowrap;
+}
+.cc-mem-search-mode:hover { color: var(--fg-primary); border-color: var(--border-bright); }
+.cc-mem-search-mode[data-mode="semantic"] {
+	color: var(--accent-mint);
+	border-color: var(--accent-mint);
+	background: color-mix(in srgb, var(--accent-mint) 10%, var(--bg-panel));
+}
+.cc-mem-search-mode:focus-visible { outline: 1px solid var(--accent-mint); outline-offset: 1px; }
+
+.cc-mem-graph-row {
+	display: flex;
+	justify-content: flex-start;
+	padding: 4px 0;
+	margin-top: 2px;
+}
+.cc-mem-graph-row .cc-btn {
+	color: var(--accent-mint);
+	border-color: color-mix(in srgb, var(--accent-mint) 50%, var(--border));
+}
+.cc-mem-graph-row .cc-btn:hover {
+	background: color-mix(in srgb, var(--accent-mint) 10%, var(--bg-base));
+	border-color: var(--accent-mint);
+	color: var(--accent-mint);
+}
 
 .cc-mem-search {
 	width: 100%;
@@ -799,6 +873,104 @@ body.cc-popup {
 .cc-mem-graph-row .cc-btn:hover {
 	background: var(--bg-elevated);
 	border-color: var(--accent-mint);
+}
+
+/* === Phase 5: semantic search + similar pins ===================== */
+.cc-mem-search-row {
+	display: flex;
+	gap: 6px;
+}
+
+.cc-mem-search-row .cc-mem-search { flex: 1; min-width: 0; }
+
+.cc-mem-search-mode {
+	background: var(--bg-base);
+	border: 1px solid var(--border);
+	color: var(--fg-muted);
+	font-family: var(--font-code);
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	text-transform: lowercase;
+	padding: 4px 10px;
+	cursor: pointer;
+	border-radius: 0;
+}
+
+.cc-mem-search-mode:hover { color: var(--accent-mint); border-color: var(--accent-mint); }
+
+.cc-mem-search-mode[data-mode="semantic"] {
+	color: var(--accent-mint);
+	border-color: var(--accent-mint);
+	background: color-mix(in srgb, var(--accent-mint) 8%, var(--bg-base));
+}
+
+.cc-mem-search-mode[disabled] {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.cc-mem-row-similar {
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px dashed color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.cc-mem-row-similar-head {
+	font-size: 10px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--fg-muted);
+	margin-bottom: 4px;
+}
+.cc-mem-row-similar-head::before { content: "// "; color: var(--fg-comment); }
+
+.cc-mem-row-similar-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.cc-mem-row-similar-list li {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 10px;
+	font-family: var(--font-code);
+	padding: 2px 0;
+}
+
+.cc-mem-row-similar-score {
+	color: var(--accent-mint);
+	font-variant-numeric: tabular-nums;
+	flex: 0 0 32px;
+}
+
+.cc-mem-row-similar-title {
+	color: var(--fg-secondary);
+	flex: 1;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	cursor: pointer;
+}
+
+.cc-mem-row-similar-title:hover { color: var(--accent-mint); }
+
+.cc-mem-row-similar-empty {
+	color: var(--fg-comment);
+	font-style: italic;
+	font-size: 10px;
+}
+
+.cc-mem-row-score {
+	font-size: 9px;
+	color: var(--accent-mint);
+	font-variant-numeric: tabular-nums;
+	margin-left: 4px;
 }
 
 .cc-mem-bulk-actions button {

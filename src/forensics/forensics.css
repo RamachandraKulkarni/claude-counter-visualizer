@@ -20,22 +20,94 @@ body.cc-forensics {
 	background: var(--bg-void);
 	min-height: 100vh;
 	-webkit-font-smoothing: antialiased;
-	padding: 24px 24px 0;
+	padding: 24px 24px 24px;
+	display: flex;
+	flex-direction: column;
 }
 
 /* === Outer terminal frame =============================== */
-.cc-fx-header,
-.cc-fx-main {
+.cc-fx-shell {
 	max-width: 1280px;
 	margin: 0 auto;
+	width: 100%;
+	background: var(--bg-base);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-frame);
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	overflow: hidden;
+}
+
+/* === Titlebar (macOS dots) ============================= */
+.cc-fx-titlebar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 14px;
+	background: var(--bg-panel);
+	border-bottom: 1px solid var(--border);
+	font-family: var(--font-code);
+}
+.cc-fx-titlebar-dots { display: flex; gap: 6px; flex: 0 0 auto; }
+.cc-fx-titlebar-dots span {
+	width: 11px; height: 11px; border-radius: 999px; background: var(--border);
+}
+.cc-fx-titlebar-dots span:nth-child(1) { background: #ff5f57; }
+.cc-fx-titlebar-dots span:nth-child(2) { background: #febc2e; }
+.cc-fx-titlebar-dots span:nth-child(3) { background: #28c840; }
+.cc-fx-titlebar-title {
+	font-size: 12px;
+	color: var(--fg-muted);
+	flex: 1;
+	text-align: center;
+	letter-spacing: 0.02em;
+}
+.cc-fx-titlebar-title strong { color: var(--fg-bright); font-weight: 600; }
+.cc-fx-titlebar-watch { color: var(--accent-mint); }
+.cc-fx-titlebar-meta {
+	font-size: 11px;
+	color: var(--fg-comment);
+	font-variant-numeric: tabular-nums;
+}
+
+/* === Command bar ======================================== */
+.cc-fx-cmdbar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 10px 16px;
+	border-bottom: 1px solid var(--border);
+	background: var(--bg-base);
+	font-family: var(--font-code);
+	font-size: 12px;
+}
+.cc-fx-cmdbar-prompt { color: var(--accent-green); }
+.cc-fx-cmdbar-user   { color: var(--fg-comment); }
+.cc-fx-cmdbar-sep    { color: var(--fg-comment); }
+.cc-fx-cmdbar-path   { color: var(--accent-purple); }
+.cc-fx-cmdbar-cmd    { color: var(--fg-bright); }
+.cc-fx-cmdbar-cursor {
+	display: inline-block;
+	width: 7px;
+	height: 14px;
+	background: var(--accent-mint);
+	vertical-align: -2px;
+	margin-left: 2px;
+	animation: cc-fx-blink 1s step-end infinite;
+}
+@keyframes cc-fx-blink { 50% { background: transparent; } }
+
+.cc-fx-header,
+.cc-fx-main {
 	width: 100%;
 }
 
 .cc-fx-header {
 	background: var(--bg-base);
-	border: 1px solid var(--border);
-	border-bottom: 0;
-	border-radius: var(--radius-frame) var(--radius-frame) 0 0;
+	border: 0;
+	border-bottom: 1px solid var(--border);
+	border-radius: 0;
 	padding: 14px 18px 12px;
 }
 
@@ -80,13 +152,47 @@ body.cc-forensics {
 
 .cc-fx-main {
 	background: var(--bg-base);
-	border: 1px solid var(--border);
-	border-radius: 0 0 var(--radius-frame) var(--radius-frame);
+	border: 0;
+	border-radius: 0;
 	padding: 16px 18px 24px;
-	margin-bottom: 24px;
+	margin: 0;
 	display: grid;
 	gap: 16px;
+	flex: 1;
 }
+
+/* === Status bar (vim/tmux) ============================= */
+.cc-fx-statusbar {
+	display: flex;
+	align-items: stretch;
+	gap: 0;
+	background: var(--bg-panel);
+	border-top: 1px solid var(--border);
+	font-family: var(--font-code);
+	font-size: 11px;
+	letter-spacing: 0.02em;
+	height: 26px;
+}
+.cc-fx-statusbar-cell {
+	padding: 0 12px;
+	display: flex;
+	align-items: center;
+	border-right: 1px solid var(--border);
+	color: var(--fg-muted);
+	white-space: nowrap;
+}
+.cc-fx-statusbar-cell:last-child { border-right: 0; }
+.cc-fx-statusbar-cell--push { margin-left: auto; }
+.cc-fx-statusbar-mode {
+	background: var(--accent-mint);
+	color: var(--bg-void);
+	font-weight: 700;
+	padding: 0 14px;
+}
+.cc-fx-statusbar-mode.cc-fx-statusbar-mode--warn { background: var(--accent-yellow); }
+.cc-fx-statusbar-mode.cc-fx-statusbar-mode--near { background: var(--accent-orange); }
+.cc-fx-statusbar-mode.cc-fx-statusbar-mode--crit { background: var(--accent-pink); }
+.cc-fx-statusbar-exit-ok { color: var(--accent-green); }
 
 /* === Toggles row ======================================== */
 .cc-fx-toggles {

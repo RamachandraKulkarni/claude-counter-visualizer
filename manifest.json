@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Claude Counter",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "browser_specific_settings": {
     "gecko": {
       "id": "{236c6889-52b6-4454-bc4b-5a2ad18effa2}",
@@ -81,6 +81,8 @@
         "src/content/model-stats.js",
         "src/content/ui.js",
         "src/content/estimator.js",
+        "src/lib/similarity.js",
+        "src/lib/embedding-manager.js",
         "src/content/pin.js",
         "src/content/injection.js",
         "src/content/main.js"
@@ -101,6 +103,11 @@
         "src/graph/graph.css",
         "src/graph/edges.js",
         "src/vendor/cc-force.js",
+        "src/vendor/cc-embed-shim.js",
+        "src/vendor/transformers-adapter.js",
+        "src/workers/embedding-worker.js",
+        "src/lib/similarity.js",
+        "src/lib/embedding-manager.js",
         "src/styles/tokens.css"
       ],
       "matches": [

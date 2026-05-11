@@ -64,7 +64,14 @@ const DEFAULT_SETTINGS = Object.freeze({
 		autoTagDate: true,
 		autoTagModel: true,
 		defaultTags: [],
-		exportFormat: 'flat'             // 'flat' | 'by-project'
+		exportFormat: 'flat',            // 'flat' | 'by-project'
+		// [CONFIG] Phase 5 — strictly opt-in. When false: zero embedding
+		// surfaces visible, zero worker spawn, zero non-claude.ai network.
+		embeddingsEnabled: false,
+		firstUseSeen: false,
+		suggestTopK: 5,
+		suggestThreshold: 0.65,
+		suggestCrossChatOnly: true
 	},
 	history: {
 		// [CONFIG] Days of daily_rollups to retain. PRD F8 range 30-365.

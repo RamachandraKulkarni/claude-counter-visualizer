@@ -12,11 +12,11 @@
 	const CONTEXT_LIMIT = 200_000;
 
 	const MODEL_COLORS = Object.freeze({
-		opus: 'var(--cc-model-opus)',
-		sonnet: 'var(--cc-model-sonnet)',
-		haiku: 'var(--cc-model-haiku)',
-		other: 'var(--cc-model-other)',
-		unknown: 'var(--cc-model-unknown)'
+		opus: 'var(--model-opus)',
+		sonnet: 'var(--model-sonnet)',
+		haiku: 'var(--model-haiku)',
+		other: 'var(--model-other)',
+		unknown: 'var(--model-unknown)'
 	});
 
 	const MODEL_LABELS = Object.freeze({
@@ -24,9 +24,9 @@
 	});
 
 	const ROLE_COLORS = Object.freeze({
-		human: '#2c84db',
-		user: '#2c84db',
-		assistant: '#b04df0'
+		human: 'var(--accent-cyan)',
+		user: 'var(--accent-cyan)',
+		assistant: 'var(--accent-purple)'
 	});
 
 	const runtime = globalThis.browser?.runtime || globalThis.chrome?.runtime || null;
@@ -198,7 +198,7 @@
 				const tri = document.createElementNS(SVG_NS, 'polygon');
 				const cx = x + 1;
 				tri.setAttribute('points', `${cx - 4},${padT - 1} ${cx + 4},${padT - 1} ${cx},${padT + 4}`);
-				tri.setAttribute('fill', 'var(--cc-warn)');
+				tri.setAttribute('fill', 'var(--accent-yellow)');
 				const title = document.createElementNS(SVG_NS, 'title');
 				title.textContent = `Attachment on message #${i + 1}`;
 				tri.appendChild(title);
@@ -339,13 +339,35 @@
 		renderBarChart(messages);
 	}
 
+	function startClock() {
+		const el = document.getElementById('cc-fx-clock');
+		if (!el) return;
+		const tick = () => {
+			try { el.textContent = `${new Date().toISOString().slice(0, 19)}Z`; } catch { /* noop */ }
+		};
+		tick();
+		setInterval(tick, 1000);
+	}
+
+	function setForensicsCmd(text) {
+		const el = document.getElementById('cc-fx-cmd');
+		if (el && text) el.textContent = text;
+	}
+
+	function setForensicsStatus(count) {
+		const el = document.getElementById('cc-fx-statusbar-count');
+		if (el) el.textContent = `${count} msgs`;
+	}
+
 	async function boot() {
+		startClock();
 		const chatId = getChatId();
 		if (!chatId) {
 			refs.meta.textContent = 'No chat selected. Open this page from the Claude Counter popup.';
 			refs.empty.hidden = false;
 			return;
 		}
+		setForensicsCmd(`cc --inspect ${chatId.slice(0, 8)}`);
 
 		if (refs.back) {
 			refs.back.href = `https://claude.ai/chat/${encodeURIComponent(chatId)}`;
@@ -357,9 +379,11 @@
 		if (!messages.length) {
 			refs.meta.textContent = `Chat ${chatId.slice(0, 8)}… · no messages stored yet.`;
 			refs.empty.hidden = false;
+			setForensicsStatus(0);
 			return;
 		}
 		refs.empty.hidden = true;
+		setForensicsStatus(messages.length);
 
 		// Compute summary.
 		const total = messages.reduce((acc, m) => acc + (m.tokens || 0), 0);

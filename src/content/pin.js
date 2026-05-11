@@ -273,6 +273,15 @@
 		applyIconState(btn, true);
 		applyPinnedClass(container, true, pin.id);
 		if (CC.ui?.showToast) CC.ui.showToast('Pinned');
+
+		// [CONFIG] Phase 5 — fire-and-forget embed. Pin UX never blocks on the
+		// model. Errors are swallowed; a missing embedding just means the pin
+		// won't surface in similar/suggested lists until backfill.
+		const embeddingsEnabled = !!CC.activeSettings?.memory?.embeddingsEnabled;
+		if (embeddingsEnabled && CC.embedding?.embedPin) {
+			CC.embedding.embedPin(pin).catch(() => { /* silent */ });
+		}
+
 		return pin;
 	}
 

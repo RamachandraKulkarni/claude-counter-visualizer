@@ -321,5 +321,249 @@
 		return base;
 	}
 
+	// =====================================================================
+	// Phase 5 — embeddings master toggle, first-use modal, backfill, purge
+	// =====================================================================
+
+	const embRefs = {
+		toggle: document.getElementById('cc-emb-enabled'),
+		statusText: document.getElementById('cc-emb-status-text'),
+		controls: document.getElementById('cc-emb-controls'),
+		backfillCount: document.getElementById('cc-emb-backfill-count'),
+		backfillStart: document.getElementById('cc-emb-backfill-start'),
+		backfillCancel: document.getElementById('cc-emb-backfill-cancel'),
+		backfillProgress: document.getElementById('cc-emb-backfill-progress'),
+		backfillFill: document.getElementById('cc-emb-backfill-fill'),
+		backfillEta: document.getElementById('cc-emb-backfill-eta'),
+		rejectionCount: document.getElementById('cc-emb-rejection-count'),
+		clearRejections: document.getElementById('cc-emb-clear-rejections'),
+		about: document.getElementById('cc-emb-about'),
+		purge: document.getElementById('cc-emb-purge'),
+		modal: document.getElementById('cc-emb-modal'),
+		modalBackdrop: document.getElementById('cc-emb-modal-backdrop'),
+		modalCancel: document.getElementById('cc-emb-modal-cancel'),
+		modalConfirm: document.getElementById('cc-emb-modal-confirm'),
+		modalRuntimeHint: document.getElementById('cc-emb-modal-runtime-hint')
+	};
+
+	let embBackfillController = null;
+	let embBackfillStart = 0;
+
+	function openOptionsDb() {
+		return new Promise((resolve) => {
+			try {
+				const req = indexedDB.open('claude_counter_v1');
+				req.onsuccess = () => resolve(req.result);
+				req.onerror = () => resolve(null);
+			} catch { resolve(null); }
+		});
+	}
+
+	async function readAll(store) {
+		const db = await openOptionsDb();
+		if (!db || !db.objectStoreNames.contains(store)) return [];
+		return new Promise((resolve) => {
+			try {
+				const tx = db.transaction(store, 'readonly');
+				const req = tx.objectStore(store).getAll();
+				req.onsuccess = () => resolve(req.result || []);
+				req.onerror = () => resolve([]);
+			} catch { resolve([]); }
+		});
+	}
+
+	async function clearStore(store) {
+		const db = await openOptionsDb();
+		if (!db || !db.objectStoreNames.contains(store)) return false;
+		return new Promise((resolve) => {
+			try {
+				const tx = db.transaction(store, 'readwrite');
+				const req = tx.objectStore(store).clear();
+				req.onsuccess = () => resolve(true);
+				req.onerror = () => resolve(false);
+			} catch { resolve(false); }
+		});
+	}
+
+	async function purgeEmbeddings() {
+		// Strip embedding fields from every pin; clear model_state +
+		// rejected_suggestions. Pins themselves are not removed.
+		const db = await openOptionsDb();
+		if (!db) return false;
+		try {
+			const tx = db.transaction(['pins', 'model_state', 'rejected_suggestions'], 'readwrite');
+			const pins = tx.objectStore('pins');
+			await new Promise((resolve) => {
+				const req = pins.openCursor();
+				req.onsuccess = () => {
+					const cur = req.result;
+					if (!cur) { resolve(); return; }
+					const v = cur.value;
+					if (v && (v.embedding || v.embeddingModel)) {
+						v.embedding = null;
+						v.embeddingModel = null;
+						v.embeddingDim = null;
+						v.embeddedAt = null;
+						try { cur.update(v); } catch { /* noop */ }
+					}
+					cur.continue();
+				};
+				req.onerror = () => resolve();
+			});
+			tx.objectStore('model_state').clear();
+			tx.objectStore('rejected_suggestions').clear();
+			await new Promise((resolve) => { tx.oncomplete = () => resolve(); tx.onerror = () => resolve(); });
+			return true;
+		} catch { return false; }
+	}
+
+	async function refreshEmbeddingsUI() {
+		const enabled = !!current?.memory?.embeddingsEnabled;
+		embRefs.controls.hidden = !enabled;
+		embRefs.statusText.textContent = enabled ? 'enabled' : 'disabled';
+
+		if (!enabled) return;
+
+		try {
+			const pins = await readAll('pins');
+			const embedded = pins.filter((p) => p.embedding).length;
+			embRefs.backfillCount.textContent = `${embedded} of ${pins.length} pins embedded`;
+		} catch { embRefs.backfillCount.textContent = '— pins embedded'; }
+
+		try {
+			const rej = await readAll('rejected_suggestions');
+			embRefs.rejectionCount.textContent = `${rej.length} recorded`;
+		} catch { embRefs.rejectionCount.textContent = '— recorded'; }
+
+		try {
+			const ms = await readAll('model_state');
+			const cur = ms[0];
+			if (cur) {
+				embRefs.about.textContent = `runtime: ${cur.runtime || '—'} · model: ${cur.modelId || '—'} · dim: ${cur.dim || '—'} · vendor: ${cur.vendor || '—'}`;
+			} else {
+				embRefs.about.textContent = 'runtime: not initialized yet — embed your first pin to load.';
+			}
+		} catch { embRefs.about.textContent = 'runtime: unavailable'; }
+	}
+
+	function openFirstUseModal() {
+		if (!embRefs.modal) return;
+		// Detect whether real Transformers.js adapter is present.
+		const probeUrl = runtime?.getURL?.('src/vendor/transformers-adapter.js');
+		if (probeUrl) {
+			fetch(probeUrl, { method: 'HEAD' }).then((r) => {
+				embRefs.modalRuntimeHint.textContent = r.ok
+					? '// real runtime detected'
+					: '// no Transformers.js bundle vendored — will run the deterministic shim (vectors are placeholders, not semantic)';
+			}).catch(() => {
+				embRefs.modalRuntimeHint.textContent = '// no Transformers.js bundle vendored — will run the deterministic shim';
+			});
+		}
+		embRefs.modal.hidden = false;
+		setTimeout(() => embRefs.modalConfirm?.focus(), 0);
+	}
+
+	function closeFirstUseModal() {
+		if (embRefs.modal) embRefs.modal.hidden = true;
+	}
+
+	if (embRefs.toggle) {
+		embRefs.toggle.addEventListener('change', async () => {
+			const wantOn = !!embRefs.toggle.checked;
+			if (wantOn && !current?.memory?.firstUseSeen) {
+				// First time toggling on — show modal and revert the checkbox
+				// until the user confirms. This keeps the flag off if they cancel.
+				embRefs.toggle.checked = false;
+				openFirstUseModal();
+				return;
+			}
+			setByPath(current, 'memory.embeddingsEnabled', wantOn);
+			scheduleSave();
+			await refreshEmbeddingsUI();
+		});
+	}
+
+	if (embRefs.modalConfirm) {
+		embRefs.modalConfirm.addEventListener('click', async () => {
+			setByPath(current, 'memory.embeddingsEnabled', true);
+			setByPath(current, 'memory.firstUseSeen', true);
+			scheduleSave();
+			closeFirstUseModal();
+			embRefs.toggle.checked = true;
+			await refreshEmbeddingsUI();
+			// Trigger an init so model_state is populated for the About line.
+			try { await globalThis.ClaudeCounter?.embedding?.init?.(); }
+			catch { /* surface in About */ }
+			await refreshEmbeddingsUI();
+		});
+	}
+	if (embRefs.modalCancel) embRefs.modalCancel.addEventListener('click', closeFirstUseModal);
+	if (embRefs.modalBackdrop) embRefs.modalBackdrop.addEventListener('click', closeFirstUseModal);
+
+	if (embRefs.backfillStart) {
+		embRefs.backfillStart.addEventListener('click', async () => {
+			const mgr = globalThis.ClaudeCounter?.embedding;
+			if (!mgr?.backfillAll) return;
+			const pins = await readAll('pins');
+			const targets = pins.filter((p) => !p.embedding);
+			if (targets.length === 0) {
+				embRefs.backfillEta.textContent = 'already up to date';
+				return;
+			}
+			embRefs.backfillStart.hidden = true;
+			embRefs.backfillCancel.hidden = false;
+			embRefs.backfillProgress.hidden = false;
+			embBackfillStart = Date.now();
+			embBackfillController = mgr.backfillAll(targets);
+			embBackfillController.onProgress(({ done, total }) => {
+				const pct = total > 0 ? (done / total) * 100 : 0;
+				embRefs.backfillFill.style.width = `${pct}%`;
+				const elapsed = (Date.now() - embBackfillStart) / 1000;
+				const rate = done > 0 ? done / elapsed : 0;
+				const remaining = rate > 0 ? Math.round((total - done) / rate) : null;
+				embRefs.backfillEta.textContent = remaining !== null
+					? `${done}/${total} · ~${remaining}s remaining`
+					: `${done}/${total}`;
+			});
+			const result = await embBackfillController.promise;
+			embRefs.backfillStart.hidden = false;
+			embRefs.backfillCancel.hidden = true;
+			embRefs.backfillEta.textContent = result.aborted
+				? `cancelled at ${result.done}/${result.total}`
+				: `done · ${result.done}/${result.total}`;
+			embBackfillController = null;
+			await refreshEmbeddingsUI();
+		});
+	}
+
+	if (embRefs.backfillCancel) {
+		embRefs.backfillCancel.addEventListener('click', () => {
+			if (embBackfillController) embBackfillController.abort();
+		});
+	}
+
+	if (embRefs.clearRejections) {
+		embRefs.clearRejections.addEventListener('click', async () => {
+			if (!window.confirm('Clear all suggestion rejections? Previously-rejected pairs will be eligible to surface again.')) return;
+			await clearStore('rejected_suggestions');
+			await refreshEmbeddingsUI();
+		});
+	}
+
+	if (embRefs.purge) {
+		embRefs.purge.addEventListener('click', async () => {
+			if (!window.confirm('Disable embeddings AND remove all locally-stored vectors? Pins themselves stay; you can re-embed later but it will take time.')) return;
+			try { globalThis.ClaudeCounter?.embedding?.terminate?.(); } catch { /* noop */ }
+			await purgeEmbeddings();
+			setByPath(current, 'memory.embeddingsEnabled', false);
+			scheduleSave();
+			embRefs.toggle.checked = false;
+			await refreshEmbeddingsUI();
+		});
+	}
+
+	// Initial render after settings hydrate.
+	setTimeout(refreshEmbeddingsUI, 100);
+
 	boot();
 })();

@@ -7,7 +7,7 @@
 
 	// [CONFIG] Schema version. Bump on every breaking change and add a migration step.
 	const DB_NAME = 'claude_counter_v1';
-	const DB_VERSION = 3;
+	const DB_VERSION = 4;
 
 	// [CONFIG] Object stores. Stays in lockstep with ARCHITECTURE.md.
 	const STORES = Object.freeze({
@@ -18,6 +18,8 @@
 		SETTINGS: 'settings',
 		PINS: 'pins',            // Phase 3 — pre-created to avoid future migrations
 		LINKS: 'links',          // Phase 4
+		REJECTED_SUGGESTIONS: 'rejected_suggestions',  // v4
+		MODEL_STATE: 'model_state',                     // v4
 		ERRORS_LOG: 'errors_log'
 	});
 
@@ -142,6 +144,30 @@
 			if (!db.objectStoreNames.contains(STORES.ERRORS_LOG)) {
 				const s = db.createObjectStore(STORES.ERRORS_LOG, { keyPath: 'id', autoIncrement: true });
 				s.createIndex('by-ts', 'ts', { unique: false });
+			}
+			// Phase 5 stores pre-created on fresh installs (the v3->v4 step
+			// guards them with `contains` so this is idempotent for upgrades).
+			if (!db.objectStoreNames.contains(STORES.REJECTED_SUGGESTIONS)) {
+				const s = db.createObjectStore(STORES.REJECTED_SUGGESTIONS, { keyPath: 'id' });
+				s.createIndex('by-from', 'fromPinId', { unique: false });
+				s.createIndex('by-to', 'toPinId', { unique: false });
+				s.createIndex('by-rejectedAt', 'rejectedAt', { unique: false });
+			}
+			if (!db.objectStoreNames.contains(STORES.MODEL_STATE)) {
+				db.createObjectStore(STORES.MODEL_STATE, { keyPath: 'id' });
+			}
+		}
+		// v3 -> v4: embedding scaffolding (Phase 5). pins.embedding is already
+		// reserved from v3, so we only create the two new stores.
+		if (from < 4) {
+			if (!db.objectStoreNames.contains(STORES.REJECTED_SUGGESTIONS)) {
+				const s = db.createObjectStore(STORES.REJECTED_SUGGESTIONS, { keyPath: 'id' });
+				s.createIndex('by-from', 'fromPinId', { unique: false });
+				s.createIndex('by-to', 'toPinId', { unique: false });
+				s.createIndex('by-rejectedAt', 'rejectedAt', { unique: false });
+			}
+			if (!db.objectStoreNames.contains(STORES.MODEL_STATE)) {
+				db.createObjectStore(STORES.MODEL_STATE, { keyPath: 'id' });
 			}
 		}
 		// v2 -> v3: pins gain `by-messageUuid` index for fast pin-state lookups.
@@ -779,6 +805,131 @@
 		}
 	}
 
+	// -------------------------------------------------------------------------
+	// Phase 5 — rejections + model state + embedding writes
+	// -------------------------------------------------------------------------
+
+	function _suggestionKey(fromPinId, toPinId) {
+		// Order-independent key so accept-then-reject doesn't double-record.
+		const [a, b] = [fromPinId, toPinId].sort();
+		return `${a}↔${b}`;
+	}
+
+	async function putRejection(rec) {
+		if (!rec || 'string' !== typeof rec.fromPinId || 'string' !== typeof rec.toPinId) return null;
+		const row = {
+			id: _suggestionKey(rec.fromPinId, rec.toPinId),
+			fromPinId: rec.fromPinId,
+			toPinId: rec.toPinId,
+			rejectedAt: numOrNull(rec.rejectedAt) ?? Date.now(),
+			reason: typeof rec.reason === 'string' ? rec.reason : null
+		};
+		try { await put(STORES.REJECTED_SUGGESTIONS, row); return row; }
+		catch (e) { reportError(e, 'db.putRejection'); return null; }
+	}
+
+	async function getRejectionsForPin(pinId) {
+		if ('string' !== typeof pinId) return [];
+		try {
+			const [a, b] = await Promise.all([
+				getAll(STORES.REJECTED_SUGGESTIONS, { index: 'by-from', query: IDBKeyRange.only(pinId) }),
+				getAll(STORES.REJECTED_SUGGESTIONS, { index: 'by-to', query: IDBKeyRange.only(pinId) })
+			]);
+			const seen = new Set();
+			const out = [];
+			for (const r of [...a, ...b]) {
+				if (seen.has(r.id)) continue;
+				seen.add(r.id);
+				out.push(r);
+			}
+			return out;
+		} catch (e) { reportError(e, 'db.getRejectionsForPin'); return []; }
+	}
+
+	async function getAllRejections() {
+		try { return await getAll(STORES.REJECTED_SUGGESTIONS); }
+		catch (e) { reportError(e, 'db.getAllRejections'); return []; }
+	}
+
+	async function clearRejections() {
+		try {
+			const db = await open();
+			const tx = db.transaction(STORES.REJECTED_SUGGESTIONS, 'readwrite');
+			await promisifyRequest(tx.objectStore(STORES.REJECTED_SUGGESTIONS).clear());
+			await txDone(tx);
+			return true;
+		} catch (e) { reportError(e, 'db.clearRejections'); return false; }
+	}
+
+	async function getModelState() {
+		try {
+			const row = await get(STORES.MODEL_STATE, 'current');
+			return row || null;
+		} catch (e) { reportError(e, 'db.getModelState'); return null; }
+	}
+
+	async function setModelState(partial) {
+		const existing = (await getModelState()) || { id: 'current' };
+		const next = { ...existing, ...partial, id: 'current', updatedAt: Date.now() };
+		try { await put(STORES.MODEL_STATE, next); return next; }
+		catch (e) { reportError(e, 'db.setModelState'); return null; }
+	}
+
+	/**
+	 * Update an existing pin's embedding fields. Preserves all other fields.
+	 * Returns the updated row or null.
+	 */
+	async function updatePinEmbedding(pinId, embedding, modelMeta) {
+		if ('string' !== typeof pinId) return null;
+		try {
+			const row = await get(STORES.PINS, pinId);
+			if (!row) return null;
+			row.embedding = embedding;
+			if (modelMeta) {
+				row.embeddingModel = modelMeta.modelId || row.embeddingModel || null;
+				row.embeddingDim = numOrNull(modelMeta.dim) ?? row.embeddingDim ?? null;
+				row.embeddedAt = Date.now();
+			}
+			await put(STORES.PINS, row);
+			return row;
+		} catch (e) {
+			reportError(e, 'db.updatePinEmbedding');
+			return null;
+		}
+	}
+
+	/**
+	 * Strip embeddings + model state — the "remove vectors" disable path.
+	 */
+	async function purgeAllEmbeddings() {
+		try {
+			const db = await open();
+			const tx = db.transaction([STORES.PINS, STORES.MODEL_STATE, STORES.REJECTED_SUGGESTIONS], 'readwrite');
+			const pins = tx.objectStore(STORES.PINS);
+			await new Promise((resolve, reject) => {
+				const req = pins.openCursor();
+				req.onsuccess = () => {
+					const cur = req.result;
+					if (!cur) { resolve(); return; }
+					const v = cur.value;
+					if (v && (v.embedding || v.embeddingModel)) {
+						v.embedding = null;
+						v.embeddingModel = null;
+						v.embeddingDim = null;
+						v.embeddedAt = null;
+						try { cur.update(v); } catch { /* noop */ }
+					}
+					cur.continue();
+				};
+				req.onerror = () => reject(req.error || new Error('purge cursor failed'));
+			});
+			tx.objectStore(STORES.MODEL_STATE).clear();
+			tx.objectStore(STORES.REJECTED_SUGGESTIONS).clear();
+			await txDone(tx);
+			return true;
+		} catch (e) { reportError(e, 'db.purgeAllEmbeddings'); return false; }
+	}
+
 	/**
 	 * Cascade-delete all links whose from/to references the given pinId.
 	 * Returns the count of links removed. Single-transaction.
@@ -879,6 +1030,14 @@
 		getAllLinks,
 		getLinksForPin,
 		cascadeDeleteLinksForPin,
+		putRejection,
+		getRejectionsForPin,
+		getAllRejections,
+		clearRejections,
+		getModelState,
+		setModelState,
+		updatePinEmbedding,
+		purgeAllEmbeddings,
 		logToDb,
 		wipe
 	};

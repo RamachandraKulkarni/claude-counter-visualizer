@@ -31,7 +31,12 @@
 		COMPOSER_INSERT: 'composer.insert',
 		PINS_GET: 'pins.get',
 		PIN_TOGGLE: 'pin.toggle',
-		PINS_WIPE: 'pins.wipe'
+		PINS_WIPE: 'pins.wipe',
+		// Phase 4 — graph
+		OPEN_GRAPH: 'open.graph',
+		// Phase 5 — embeddings
+		EMBED_PIN: 'embed.pin',
+		EMBED_QUERY: 'embed.query'
 	});
 
 	const VALID_KINDS = new Set(Object.values(KIND));

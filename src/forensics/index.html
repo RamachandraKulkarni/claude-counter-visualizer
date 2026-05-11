@@ -7,13 +7,28 @@
 	<link rel="stylesheet" href="forensics.css">
 </head>
 <body class="cc-forensics">
-	<header class="cc-fx-header">
-		<div class="cc-fx-title-row">
-			<h1 id="cc-fx-title">Conversation forensics</h1>
-			<a class="cc-fx-back" href="#" id="cc-fx-back" aria-label="Open the chat in claude.ai">Open chat ↗</a>
+	<div class="cc-fx-shell">
+		<div class="cc-fx-titlebar">
+			<div class="cc-fx-titlebar-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+			<div class="cc-fx-titlebar-title"><strong>cc</strong> — forensics · <span class="cc-fx-titlebar-watch">watching</span> claude.ai</div>
+			<div class="cc-fx-titlebar-meta" id="cc-fx-clock">—</div>
 		</div>
-		<div class="cc-fx-meta" id="cc-fx-meta" aria-live="polite">Loading…</div>
-	</header>
+		<div class="cc-fx-cmdbar">
+			<span class="cc-fx-cmdbar-prompt">$</span>
+			<span class="cc-fx-cmdbar-user">cc</span>
+			<span class="cc-fx-cmdbar-sep">:</span>
+			<span class="cc-fx-cmdbar-path">~/forensics</span>
+			<span class="cc-fx-cmdbar-sep">$</span>
+			<span class="cc-fx-cmdbar-cmd" id="cc-fx-cmd">cc --inspect</span>
+			<span class="cc-fx-cmdbar-cursor"></span>
+		</div>
+		<header class="cc-fx-header">
+			<div class="cc-fx-title-row">
+				<h1 id="cc-fx-title">Conversation forensics</h1>
+				<a class="cc-fx-back" href="#" id="cc-fx-back" aria-label="Open the chat in claude.ai">open chat ↗</a>
+			</div>
+			<div class="cc-fx-meta" id="cc-fx-meta" aria-live="polite">Loading…</div>
+		</header>
 
 	<main class="cc-fx-main">
 		<section class="cc-fx-toggles" aria-label="Event annotations">
@@ -46,6 +61,16 @@
 			<dl id="cc-fx-details-body"></dl>
 		</section>
 	</main>
+
+		<div class="cc-fx-statusbar" aria-hidden="true">
+			<span class="cc-fx-statusbar-cell cc-fx-statusbar-mode" id="cc-fx-statusbar-mode">─INSPECT─</span>
+			<span class="cc-fx-statusbar-cell">cc.exe</span>
+			<span class="cc-fx-statusbar-cell">utf-8</span>
+			<span class="cc-fx-statusbar-cell">o200k_base</span>
+			<span class="cc-fx-statusbar-cell cc-fx-statusbar-cell--push" id="cc-fx-statusbar-count">— msgs</span>
+			<span class="cc-fx-statusbar-cell"><span class="cc-fx-statusbar-exit-ok">[OK]</span></span>
+		</div>
+	</div>
 
 	<script src="forensics.js"></script>
 </body>
