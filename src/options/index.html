@@ -61,6 +61,19 @@
 			</div>
 		</section>
 
+		<section class="cc-section" aria-labelledby="cc-sec-history">
+			<h2 id="cc-sec-history">History</h2>
+			<p class="cc-help">How many days of daily summaries to keep. Raw snapshots and message metadata older than 7 days are always compacted into the daily summary.</p>
+			<label class="cc-row-label">
+				Retention (days)
+				<input type="number" min="30" max="365" step="1" data-setting="history.retentionDays">
+			</label>
+			<div class="cc-row-label cc-diagnostics" aria-live="polite">
+				<span class="cc-label">Storage</span>
+				<span id="cc-storage-readout">—</span>
+			</div>
+		</section>
+
 		<section class="cc-section" aria-labelledby="cc-sec-memory">
 			<h2 id="cc-sec-memory">Memory <span class="cc-pill">v0.7</span></h2>
 			<p class="cc-help">Pinning, browsing, and Obsidian export. Coming in a later release.</p>

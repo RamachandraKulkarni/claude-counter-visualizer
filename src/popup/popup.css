@@ -314,3 +314,79 @@ body.cc-popup {
 }
 
 .cc-link:hover { color: var(--cc-text-strong); text-decoration: underline; }
+
+/* ---------- Phase 2 additions ---------- */
+
+/* Per-model stacked bar */
+.cc-stacked-bar {
+	width: 100%;
+	height: 14px;
+	border-radius: 999px;
+	overflow: hidden;
+	background: var(--cc-chip-bg);
+}
+
+.cc-stacked-bar rect:focus-visible { outline: 2px solid var(--cc-accent); }
+
+.cc-models-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+	margin-top: 6px;
+	font-size: 11px;
+	color: var(--cc-text-muted);
+}
+
+.cc-models-legend .cc-legend-dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 999px;
+	margin-right: 6px;
+	vertical-align: middle;
+}
+
+.cc-models-ratio { margin-top: 4px; font-size: 11px; }
+
+.cc-chat-models { font-size: 11px; }
+
+/* Color slots — used by stacked bar + sparkline accents. */
+.cc-color-opus    { background-color: #b04df0; }
+.cc-color-sonnet  { background-color: #2c84db; }
+.cc-color-haiku   { background-color: #4a9b5f; }
+.cc-color-other   { background-color: #8a8a87; }
+.cc-color-unknown { background-color: rgba(140, 140, 140, 0.5); }
+
+.cc-forensics-btn {
+	margin-top: 6px;
+	width: 100%;
+	text-align: left;
+}
+
+/* Sparkline tooltip + highlighted current-day point */
+.cc-spark-dot {
+	fill: var(--cc-bg-card);
+	stroke: var(--cc-accent);
+	stroke-width: 1.5;
+}
+
+.cc-spark-dot--today {
+	fill: var(--cc-accent);
+}
+
+.cc-spark-tooltip {
+	position: fixed;
+	background: var(--cc-bg-card);
+	border: 1px solid var(--cc-border);
+	border-radius: 6px;
+	padding: 6px 9px;
+	font-size: 11px;
+	color: var(--cc-text);
+	pointer-events: none;
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+	z-index: 10;
+	transform: translate(-50%, -100%);
+	white-space: nowrap;
+}
+
+.cc-spark-tooltip[hidden] { display: none; }

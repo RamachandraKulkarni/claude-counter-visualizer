@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<title>Claude Counter — Forensics</title>
+	<link rel="stylesheet" href="forensics.css">
+</head>
+<body class="cc-forensics">
+	<header class="cc-fx-header">
+		<div class="cc-fx-title-row">
+			<h1 id="cc-fx-title">Conversation forensics</h1>
+			<a class="cc-fx-back" href="#" id="cc-fx-back" aria-label="Open the chat in claude.ai">Open chat ↗</a>
+		</div>
+		<div class="cc-fx-meta" id="cc-fx-meta" aria-live="polite">Loading…</div>
+	</header>
+
+	<main class="cc-fx-main">
+		<section class="cc-fx-toggles" aria-label="Event annotations">
+			<label><input type="checkbox" id="cc-fx-tog-model" checked> Model switches</label>
+			<label><input type="checkbox" id="cc-fx-tog-attach" checked> Attachments</label>
+		</section>
+
+		<section class="cc-fx-chart" aria-labelledby="cc-fx-bar-title">
+			<h2 id="cc-fx-bar-title">Tokens per message</h2>
+			<div class="cc-fx-chart-wrap">
+				<svg class="cc-fx-bar" id="cc-fx-bar" preserveAspectRatio="none" aria-label="Token cost per message"></svg>
+			</div>
+			<div class="cc-fx-empty" id="cc-fx-empty" hidden>
+				Open a chat in claude.ai for at least one full turn before viewing forensics.
+			</div>
+		</section>
+
+		<section class="cc-fx-chart" aria-labelledby="cc-fx-line-title">
+			<h2 id="cc-fx-line-title">Cumulative context</h2>
+			<div class="cc-fx-chart-wrap">
+				<svg class="cc-fx-line" id="cc-fx-line" preserveAspectRatio="none" aria-label="Cumulative context over time"></svg>
+			</div>
+		</section>
+
+		<section class="cc-fx-details" id="cc-fx-details" aria-live="polite" hidden>
+			<header>
+				<span class="cc-fx-details-title" id="cc-fx-details-title">Message</span>
+				<button type="button" id="cc-fx-details-close" aria-label="Close message details">✕</button>
+			</header>
+			<dl id="cc-fx-details-body"></dl>
+		</section>
+	</main>
+
+	<script src="forensics.js"></script>
+</body>
+</html>

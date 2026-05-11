@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Claude Counter",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "browser_specific_settings": {
     "gecko": {
       "id": "{236c6889-52b6-4454-bc4b-5a2ad18effa2}",
@@ -64,9 +64,11 @@
         "src/content/utils/worker-tokenizer.js",
         "src/content/bridge-client.js",
         "src/vendor/o200k_base.js",
+        "src/content/model-detect.js",
         "src/content/tokens.js",
         "src/content/burn-rate.js",
         "src/content/forecast.js",
+        "src/content/model-stats.js",
         "src/content/ui.js",
         "src/content/estimator.js",
         "src/content/main.js"
@@ -78,7 +80,10 @@
       "resources": [
         "src/injected/bridge.js",
         "src/workers/tokenizer.worker.js",
-        "src/vendor/o200k_base.js"
+        "src/vendor/o200k_base.js",
+        "src/forensics/index.html",
+        "src/forensics/forensics.js",
+        "src/forensics/forensics.css"
       ],
       "matches": [
         "https://claude.ai/*"

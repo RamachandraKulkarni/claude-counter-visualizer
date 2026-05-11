@@ -6,7 +6,8 @@
 	const KIND = Object.freeze({
 		SETTINGS_GET: 'settings.get',
 		SETTINGS_SET: 'settings.set',
-		WIPE_ALL: 'wipe.all'
+		WIPE_ALL: 'wipe.all',
+		STORAGE_ESTIMATE: 'storage.estimate'
 	});
 
 	const DEFAULTS = {
@@ -30,6 +31,9 @@
 			session: [75, 90, 95],
 			weekly: [75, 90, 95],
 			contextHealth: { moderate: 50, near: 75, critical: 90 }
+		},
+		history: {
+			retentionDays: 90
 		}
 	};
 
@@ -177,6 +181,31 @@
 		});
 	}
 
+	async function refreshStorageReadout() {
+		const out = document.getElementById('cc-storage-readout');
+		if (!out) return;
+		// Prefer the SW (covers worker-context paths); fall back to navigator.storage here.
+		let estimate = null;
+		try {
+			const res = await send(KIND.STORAGE_ESTIMATE);
+			if (res?.ok && res.estimate) estimate = res.estimate;
+		} catch { /* noop */ }
+		if (!estimate && navigator?.storage?.estimate) {
+			try { estimate = await navigator.storage.estimate(); } catch { /* noop */ }
+		}
+		if (!estimate) { out.textContent = 'unavailable'; return; }
+		const used = estimate.usage || 0;
+		const quota = estimate.quota || 0;
+		const fmt = (n) => {
+			if (n < 1024) return `${n} B`;
+			if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+			return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+		};
+		out.textContent = quota > 0
+			? `${fmt(used)} of ${fmt(quota)} used`
+			: `${fmt(used)} used`;
+	}
+
 	async function boot() {
 		const res = await send(KIND.SETTINGS_GET);
 		if (res?.ok && res.settings) {
@@ -184,6 +213,7 @@
 		}
 		hydrate();
 		bindInputs();
+		refreshStorageReadout();
 	}
 
 	function mergeDefaults(base, override) {

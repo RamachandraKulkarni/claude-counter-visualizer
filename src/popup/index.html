@@ -40,12 +40,19 @@
 					<span class="cc-chip" id="cc-now-cache">—</span>
 				</div>
 
+				<div class="cc-row cc-row-muted cc-chat-models" id="cc-chat-models" hidden>
+					<span class="cc-label">This chat</span>
+					<span class="cc-value" id="cc-chat-models-text">—</span>
+				</div>
+
 				<details class="cc-heaviest">
 					<summary>Heaviest messages</summary>
 					<ul class="cc-heaviest-list" id="cc-heaviest-list" role="list">
 						<li class="cc-empty">All messages are similarly sized.</li>
 					</ul>
 				</details>
+
+				<button type="button" class="cc-card-action cc-forensics-btn" id="cc-open-forensics" aria-label="Open detailed forensics view">Open detailed view →</button>
 			</div>
 		</section>
 
@@ -102,6 +109,21 @@
 				<div class="cc-row cc-row-muted">
 					<span class="cc-label">Burn rate</span>
 					<span class="cc-value" id="cc-burn-rate">—</span>
+				</div>
+			</div>
+		</section>
+
+		<!-- MODELS CARD (Phase 2 F9) -->
+		<section class="cc-card" id="cc-card-models" aria-labelledby="cc-card-models-title" hidden>
+			<header class="cc-card-header">
+				<h2 id="cc-card-models-title" class="cc-card-title">Models · last 7d</h2>
+				<span class="cc-card-suffix" id="cc-models-sample">—</span>
+			</header>
+			<div class="cc-card-body">
+				<svg class="cc-stacked-bar" id="cc-models-bar" viewBox="0 0 100 14" preserveAspectRatio="none" aria-label="Token share by model"></svg>
+				<div class="cc-models-legend" id="cc-models-legend"></div>
+				<div class="cc-row cc-row-muted cc-models-ratio" id="cc-models-ratio" hidden>
+					<span class="cc-value" id="cc-models-ratio-text">—</span>
 				</div>
 			</div>
 		</section>

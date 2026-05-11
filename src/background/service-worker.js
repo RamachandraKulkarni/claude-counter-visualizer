@@ -20,7 +20,12 @@ const KIND = Object.freeze({
 	FOCUS_CHAT: 'focus.chat',
 	SCROLL_TO_MESSAGE: 'scroll.to.message',
 	HEAVIEST_MESSAGES_GET: 'heaviest.get',
-	FORECAST_GET: 'forecast.get'
+	FORECAST_GET: 'forecast.get',
+	// Phase 2
+	ROLLUPS_GET: 'rollups.get',
+	STORAGE_ESTIMATE: 'storage.estimate',
+	OPEN_FORENSICS: 'open.forensics',
+	MESSAGES_FOR_CONVERSATION: 'messages.forConversation'
 });
 
 // [CONFIG] Defaults seeded on install. Mirrors options page UI.
@@ -49,6 +54,10 @@ const DEFAULT_SETTINGS = Object.freeze({
 	memory: {
 		hotkey: 'P',
 		defaultTags: []
+	},
+	history: {
+		// [CONFIG] Days of daily_rollups to retain. PRD F8 range 30-365.
+		retentionDays: 90
 	}
 });
 
@@ -154,6 +163,284 @@ const alarms = globalThis.browser?.alarms || globalThis.chrome?.alarms || null;
 const notifications = globalThis.browser?.notifications || globalThis.chrome?.notifications || null;
 const tabsApi = globalThis.browser?.tabs || globalThis.chrome?.tabs || null;
 const runtime = globalThis.browser?.runtime || globalThis.chrome?.runtime || null;
+
+// ---------------------------------------------------------------------------
+// IndexedDB access from the SW context. Mirrors `utils/db.js` schema names —
+// the SW only reads/writes via promisified requests, never creates stores.
+// ---------------------------------------------------------------------------
+
+const DB_NAME = 'claude_counter_v1';
+const DB_VERSION = 2;
+const SW_STORES = Object.freeze({
+	SNAPSHOTS: 'snapshots',
+	MESSAGES_META: 'messages_meta',
+	DAILY_ROLLUPS: 'daily_rollups',
+	SETTINGS: 'settings'
+});
+
+let dbPromise = null;
+function openSwDb() {
+	if (dbPromise) return dbPromise;
+	dbPromise = new Promise((resolve, reject) => {
+		try {
+			const req = indexedDB.open(DB_NAME, DB_VERSION);
+			req.onupgradeneeded = () => {
+				// SW only opens — content-script utils/db.js owns the schema. If we
+				// land here we're a clean install with no content script yet; create
+				// the minimum stores the SW needs so the rollup alarm doesn't fail.
+				const db = req.result;
+				const ensureStore = (name, opts) => {
+					if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, opts);
+				};
+				ensureStore(SW_STORES.SNAPSHOTS, { keyPath: 'id', autoIncrement: true });
+				ensureStore(SW_STORES.MESSAGES_META, { keyPath: 'id' });
+				ensureStore(SW_STORES.DAILY_ROLLUPS, { keyPath: 'date' });
+				ensureStore(SW_STORES.SETTINGS, { keyPath: 'key' });
+			};
+			req.onsuccess = () => {
+				const db = req.result;
+				db.onversionchange = () => { try { db.close(); } catch { /* noop */ } dbPromise = null; };
+				resolve(db);
+			};
+			req.onerror = () => { dbPromise = null; reject(req.error || new Error('SW DB open failed')); };
+			req.onblocked = () => log('warn', 'SW DB open blocked');
+		} catch (e) {
+			dbPromise = null;
+			reject(e);
+		}
+	});
+	return dbPromise;
+}
+
+function swPromisify(req) {
+	return new Promise((resolve, reject) => {
+		req.onsuccess = () => resolve(req.result);
+		req.onerror = () => reject(req.error || new Error('IDB request failed'));
+	});
+}
+
+async function swGetAll(store) {
+	try {
+		const db = await openSwDb();
+		if (!db.objectStoreNames.contains(store)) return [];
+		const tx = db.transaction(store, 'readonly');
+		return await swPromisify(tx.objectStore(store).getAll());
+	} catch (e) {
+		log('warn', 'swGetAll failed', { store, error: e?.message });
+		return [];
+	}
+}
+
+async function swPut(store, value) {
+	try {
+		const db = await openSwDb();
+		if (!db.objectStoreNames.contains(store)) return;
+		const tx = db.transaction(store, 'readwrite');
+		await swPromisify(tx.objectStore(store).put(value));
+		await new Promise((resolve) => { tx.oncomplete = () => resolve(); tx.onerror = () => resolve(); tx.onabort = () => resolve(); });
+	} catch (e) {
+		log('warn', 'swPut failed', { store, error: e?.message });
+	}
+}
+
+function localDateKey(tsMs) {
+	const d = new Date(tsMs);
+	const y = d.getFullYear();
+	const m = String(d.getMonth() + 1).padStart(2, '0');
+	const day = String(d.getDate()).padStart(2, '0');
+	return `${y}-${m}-${day}`;
+}
+
+function localDateBounds(dateKey) {
+	const [y, m, d] = dateKey.split('-').map((n) => parseInt(n, 10));
+	const start = new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+	const end = new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+	return { start, end };
+}
+
+/**
+ * Aggregate a single day's raw rows into a daily_rollups row.
+ * Idempotent — re-running for the same date overwrites the existing row.
+ */
+async function buildDailyRollup(dateKey) {
+	const bounds = localDateBounds(dateKey);
+	if (!bounds) return null;
+	const { start, end } = bounds;
+
+	const snapshots = await swGetAll(SW_STORES.SNAPSHOTS);
+	const messages = await swGetAll(SW_STORES.MESSAGES_META);
+
+	let peakSessionPct = null;
+	let peakWeeklyPct = null;
+	let snapshotCount = 0;
+	for (const s of snapshots) {
+		if ('number' !== typeof s.ts || s.ts < start || s.ts > end) continue;
+		snapshotCount++;
+		if ('number' === typeof s.sessionPct && (peakSessionPct === null || s.sessionPct > peakSessionPct)) {
+			peakSessionPct = s.sessionPct;
+		}
+		if ('number' === typeof s.weeklyPct && (peakWeeklyPct === null || s.weeklyPct > peakWeeklyPct)) {
+			peakWeeklyPct = s.weeklyPct;
+		}
+	}
+
+	let totalTokens = 0;
+	let messageCount = 0;
+	const modelBreakdown = { opus: 0, sonnet: 0, haiku: 0, other: 0, unknown: 0 };
+	for (const m of messages) {
+		if ('number' !== typeof m.createdAt || m.createdAt < start || m.createdAt > end) continue;
+		messageCount++;
+		const t = 'number' === typeof m.tokens ? m.tokens : 0;
+		totalTokens += t;
+		const bucket = ['opus', 'sonnet', 'haiku'].includes(m.model)
+			? m.model
+			: (m.model === 'unknown' ? 'unknown' : 'other');
+		modelBreakdown[bucket] = (modelBreakdown[bucket] || 0) + t;
+	}
+
+	return {
+		date: dateKey,
+		peakSessionPct,
+		peakWeeklyPct,
+		totalTokens,
+		messageCount,
+		modelBreakdown,
+		snapshotCount,
+		rolledUpAt: Date.now()
+	};
+}
+
+const LAST_ROLLUP_KEY = 'cc:lastRollupDate';
+
+async function getLastRollupDate() {
+	const got = await storageGet('local', LAST_ROLLUP_KEY);
+	return got[LAST_ROLLUP_KEY] || null;
+}
+
+async function setLastRollupDate(dateKey) {
+	await storageSet('local', { [LAST_ROLLUP_KEY]: dateKey });
+}
+
+/**
+ * Schedule a daily-rollup alarm at the next local 04:00. The alarm fires once,
+ * then a follow-up 24h period repeats it. On wake we also catch-up any missed
+ * days back to whatever `cc:lastRollupDate` reports.
+ */
+function scheduleDailyRollupAlarm() {
+	if (!alarms?.create) return;
+	const now = new Date();
+	const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 4, 0, 0, 0);
+	if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 1);
+	try {
+		alarms.create('cc:daily-rollup', { when: target.getTime(), periodInMinutes: 1440 });
+	} catch (e) {
+		log('warn', 'daily rollup alarm create failed', { error: e?.message });
+	}
+}
+
+/**
+ * Run rollups for every missing day since `cc:lastRollupDate`, plus yesterday.
+ * Also prunes raw rows beyond 7 days and rollups beyond retention setting.
+ */
+async function runRollupCatchup() {
+	const yesterdayMs = Date.now() - 86_400_000;
+	const targetDateKey = localDateKey(yesterdayMs);
+
+	const lastDate = await getLastRollupDate();
+	const cursor = new Date();
+	cursor.setDate(cursor.getDate() - 1);
+
+	const datesToBuild = [];
+	if (!lastDate) {
+		datesToBuild.push(targetDateKey);
+	} else {
+		// Walk forward from the day after lastDate up to and including targetDateKey.
+		const [ly, lm, ld] = lastDate.split('-').map((n) => parseInt(n, 10));
+		const walker = new Date(ly, lm - 1, ld);
+		walker.setDate(walker.getDate() + 1);
+		while (walker.getTime() <= yesterdayMs) {
+			datesToBuild.push(localDateKey(walker.getTime()));
+			walker.setDate(walker.getDate() + 1);
+			// [EDGE] Safety stop — never build more than 365 retroactive rollups.
+			if (datesToBuild.length > 365) break;
+		}
+	}
+
+	for (const dateKey of datesToBuild) {
+		try {
+			const row = await buildDailyRollup(dateKey);
+			if (row) await swPut(SW_STORES.DAILY_ROLLUPS, row);
+		} catch (e) {
+			log('warn', 'rollup build failed', { date: dateKey, error: e?.message });
+		}
+	}
+
+	if (datesToBuild.length > 0) {
+		await setLastRollupDate(datesToBuild[datesToBuild.length - 1]);
+	}
+
+	// Prune snapshots + messages older than 7d (raw retention)
+	await pruneRawOlderThan(7 * 86_400_000);
+
+	// Prune daily rollups beyond user retention.
+	const settings = await getSettings();
+	const retentionDays = numOrNull(settings?.history?.retentionDays) ?? 90;
+	await pruneRollupsOlderThanDays(retentionDays);
+}
+
+async function pruneRawOlderThan(maxAgeMs) {
+	const cutoff = Date.now() - maxAgeMs;
+	try {
+		const db = await openSwDb();
+		for (const store of [SW_STORES.SNAPSHOTS, SW_STORES.MESSAGES_META]) {
+			if (!db.objectStoreNames.contains(store)) continue;
+			const tx = db.transaction(store, 'readwrite');
+			const oStore = tx.objectStore(store);
+			await new Promise((resolve) => {
+				const req = oStore.openCursor();
+				req.onsuccess = () => {
+					const cur = req.result;
+					if (!cur) { resolve(); return; }
+					const ts = cur.value?.ts ?? cur.value?.createdAt;
+					if ('number' === typeof ts && ts < cutoff) {
+						try { cur.delete(); } catch { /* noop */ }
+					}
+					cur.continue();
+				};
+				req.onerror = () => resolve();
+			});
+			await new Promise((resolve) => { tx.oncomplete = () => resolve(); tx.onerror = () => resolve(); tx.onabort = () => resolve(); });
+		}
+	} catch (e) {
+		log('warn', 'pruneRawOlderThan failed', { error: e?.message });
+	}
+}
+
+async function pruneRollupsOlderThanDays(days) {
+	if ('number' !== typeof days || days <= 0) return;
+	const cutoff = localDateKey(Date.now() - days * 86_400_000);
+	try {
+		const db = await openSwDb();
+		if (!db.objectStoreNames.contains(SW_STORES.DAILY_ROLLUPS)) return;
+		const tx = db.transaction(SW_STORES.DAILY_ROLLUPS, 'readwrite');
+		const oStore = tx.objectStore(SW_STORES.DAILY_ROLLUPS);
+		await new Promise((resolve) => {
+			const req = oStore.openCursor();
+			req.onsuccess = () => {
+				const cur = req.result;
+				if (!cur) { resolve(); return; }
+				if (typeof cur.value?.date === 'string' && cur.value.date < cutoff) {
+					try { cur.delete(); } catch { /* noop */ }
+				}
+				cur.continue();
+			};
+			req.onerror = () => resolve();
+		});
+		await new Promise((resolve) => { tx.oncomplete = () => resolve(); tx.onerror = () => resolve(); tx.onabort = () => resolve(); });
+	} catch (e) {
+		log('warn', 'pruneRollupsOlderThanDays failed', { error: e?.message });
+	}
+}
 
 async function scheduleResetAlarms(snapshot) {
 	if (!alarms?.create) return;
@@ -413,6 +700,50 @@ if (runtime?.onMessage?.addListener) {
 					return;
 				}
 
+				case KIND.ROLLUPS_GET: {
+					const days = numOrNull(msg.payload?.days) ?? 7;
+					const sinceTs = Date.now() - Math.min(365, Math.max(1, days)) * 86_400_000;
+					const sinceKey = localDateKey(sinceTs);
+					const all = await swGetAll(SW_STORES.DAILY_ROLLUPS);
+					const filtered = all.filter((r) => typeof r.date === 'string' && r.date >= sinceKey);
+					filtered.sort((a, b) => a.date.localeCompare(b.date));
+					sendResponse({ ok: true, rollups: filtered });
+					return;
+				}
+
+				case KIND.STORAGE_ESTIMATE: {
+					let estimate = null;
+					try {
+						if (globalThis.navigator?.storage?.estimate) {
+							estimate = await navigator.storage.estimate();
+						}
+					} catch { /* noop */ }
+					sendResponse({ ok: true, estimate });
+					return;
+				}
+
+				case KIND.MESSAGES_FOR_CONVERSATION: {
+					const conversationId = typeof msg.payload?.conversationId === 'string'
+						? msg.payload.conversationId : null;
+					if (!conversationId) { sendResponse({ ok: false, error: 'missing conversationId' }); return; }
+					const all = await swGetAll(SW_STORES.MESSAGES_META);
+					const rows = all
+						.filter((m) => m.conversationId === conversationId)
+						.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+					sendResponse({ ok: true, messages: rows });
+					return;
+				}
+
+				case KIND.OPEN_FORENSICS: {
+					if (!tabsApi?.create || !runtime?.getURL) { sendResponse({ ok: false }); return; }
+					const conversationId = typeof msg.payload?.conversationId === 'string'
+						? msg.payload.conversationId : '';
+					const url = runtime.getURL(`src/forensics/index.html${conversationId ? `?chatId=${encodeURIComponent(conversationId)}` : ''}`);
+					try { tabsApi.create({ url }); sendResponse({ ok: true }); }
+					catch (e) { sendResponse({ ok: false, error: e?.message }); }
+					return;
+				}
+
 				case KIND.SCROLL_TO_MESSAGE: {
 					if (!tabsApi) { sendResponse({ ok: false }); return; }
 					try {
@@ -464,6 +795,10 @@ if (alarms?.onAlarm?.addListener) {
 			if (state?.snapshot) await checkThresholds(state.snapshot);
 			return;
 		}
+		if (alarm.name === 'cc:daily-rollup') {
+			await runRollupCatchup();
+			return;
+		}
 		if (alarm.name === 'cc:session-reset' || alarm.name === 'cc:weekly-reset') {
 			// Mark cache as stale; a content-script tick will refresh it.
 			const state = await getCachedState();
@@ -512,9 +847,16 @@ if (runtime?.onInstalled?.addListener) {
 		if (!existing || 'object' !== typeof existing || !existing.display) {
 			await setSettings(structuredClone(DEFAULT_SETTINGS));
 		}
+		scheduleDailyRollupAlarm();
+		// Run catch-up immediately so users see history without waiting overnight.
+		runRollupCatchup().catch((e) => log('warn', 'initial catchup failed', { error: e?.message }));
 	});
 }
 
 if (runtime?.onStartup?.addListener) {
-	runtime.onStartup.addListener(() => log('info', 'startup'));
+	runtime.onStartup.addListener(() => {
+		log('info', 'startup');
+		scheduleDailyRollupAlarm();
+		runRollupCatchup().catch((e) => log('warn', 'startup catchup failed', { error: e?.message }));
+	});
 }

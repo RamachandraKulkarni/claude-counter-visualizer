@@ -290,6 +290,7 @@
 
 			// [CONFIG] Per-message metadata for bloat hunter + per-conversation history.
 			if (msg?.uuid) {
+				const modelFromPayload = CC.modelDetect?.modelFromMessage?.(msg) || null;
 				perMessage.push({
 					id: msg.uuid,
 					role: msg.sender || 'unknown',
@@ -297,7 +298,9 @@
 					createdAt: msg.created_at ? Date.parse(msg.created_at) : null,
 					snippet: makeSnippet(msgText),
 					hasAttachments: Array.isArray(msg.attachments) && msg.attachments.length > 0,
-					attachmentCount: Array.isArray(msg.attachments) ? msg.attachments.length : 0
+					attachmentCount: Array.isArray(msg.attachments) ? msg.attachments.length : 0,
+					// `null` here means "tagged at write time with the active model" in main.js.
+					model: modelFromPayload
 				});
 			}
 		}

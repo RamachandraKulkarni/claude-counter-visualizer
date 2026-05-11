@@ -7,7 +7,9 @@
 		CHAT_MENU_TRIGGER: '[data-testid="chat-menu-trigger"]',
 		MODEL_SELECTOR_DROPDOWN: '[data-testid="model-selector-dropdown"]',
 		CHAT_PROJECT_WRAPPER: '.chat-project-wrapper',
-		BRIDGE_SCRIPT_ID: 'cc-bridge-script'
+		BRIDGE_SCRIPT_ID: 'cc-bridge-script',
+		// [CONFIG] Phase 2 — active model label lives inside the model selector trigger.
+		ACTIVE_MODEL_LABEL: '[data-testid="model-selector-dropdown"]'
 	});
 
 	CC.CONST = Object.freeze({

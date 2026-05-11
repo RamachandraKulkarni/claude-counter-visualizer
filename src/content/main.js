@@ -225,7 +225,7 @@
 			sessionResetMs,
 			weeklyResetMs,
 			source: source || 'unknown',
-			model: null,
+			model: CC.modelDetect?.getCurrentModel?.() || null,
 			// Include the conversation context with the snapshot so the popup
 			// can render Now-card values without a content script connection.
 			contextPct: lastContextMetrics?.usedPct ?? null,
@@ -346,8 +346,11 @@
 			CC.estimator.setTrunkTokens(metrics.totalTokens || 0);
 		}
 
-		// Persist per-message metadata for burn-rate calculation.
+		// Persist per-message metadata for burn-rate calculation + Phase 2 model
+		// stats. Prefer the per-message model from the payload; otherwise fall
+		// back to the current active model (best-effort tagging).
 		if (db?.putMessageMeta && Array.isArray(metrics.perMessage)) {
+			const activeModel = CC.modelDetect?.getCurrentModel?.() || 'unknown';
 			for (const m of metrics.perMessage) {
 				if (!m.createdAt) continue;
 				db.putMessageMeta({
@@ -355,7 +358,10 @@
 					conversationId,
 					role: m.role,
 					tokens: m.tokens,
-					createdAt: m.createdAt
+					createdAt: m.createdAt,
+					model: m.model || activeModel,
+					hasAttachments: !!m.hasAttachments,
+					snippet: m.snippet
 				}).catch(() => { /* logged in db.js */ });
 			}
 		}
@@ -485,6 +491,10 @@
 	// [CONFIG] Phase 1 modules — guarded so missing modules don't crash the host.
 	if (CC.estimator?.initialize) {
 		try { CC.estimator.initialize(); } catch (e) { reportError(e, 'estimator.initialize'); }
+	}
+	// [CONFIG] Phase 2 — model detection so messages_meta rows can carry an id.
+	if (CC.modelDetect?.initialize) {
+		try { CC.modelDetect.initialize(); } catch (e) { reportError(e, 'modelDetect.initialize'); }
 	}
 
 	// [SECURITY] Listen for service-worker messages (settings changes, scroll-to).

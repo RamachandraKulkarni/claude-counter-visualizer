@@ -7,13 +7,14 @@
 
 	// [CONFIG] Schema version. Bump on every breaking change and add a migration step.
 	const DB_NAME = 'claude_counter_v1';
-	const DB_VERSION = 1;
+	const DB_VERSION = 2;
 
 	// [CONFIG] Object stores. Stays in lockstep with ARCHITECTURE.md.
 	const STORES = Object.freeze({
 		SNAPSHOTS: 'snapshots',
 		CONVERSATIONS: 'conversations',
 		MESSAGES_META: 'messages_meta',
+		DAILY_ROLLUPS: 'daily_rollups',  // v2
 		SETTINGS: 'settings',
 		PINS: 'pins',            // Phase 3 — pre-created to avoid future migrations
 		LINKS: 'links',          // Phase 4
@@ -63,6 +64,11 @@
 				const oldVersion = event.oldVersion || 0;
 				try {
 					runMigrations(db, oldVersion, DB_VERSION);
+					// [CONFIG] Data-only migrations that need the active upgrade tx.
+					if (oldVersion < 2) {
+						const tx = req.transaction;
+						if (tx) backfillMessageModelsV2(tx);
+					}
 				} catch (e) {
 					reportError(e, 'db.migrate');
 				}
@@ -139,8 +145,48 @@
 				s.createIndex('by-ts', 'ts', { unique: false });
 			}
 		}
-		// future: if (from < 2) { ... }
+		// v1 -> v2: daily rollups + model tagging
+		if (from < 2) {
+			if (!db.objectStoreNames.contains(STORES.DAILY_ROLLUPS)) {
+				const s = db.createObjectStore(STORES.DAILY_ROLLUPS, { keyPath: 'date' });
+				s.createIndex('by-date', 'date', { unique: true });
+			}
+			// [EDGE] Backfill `model` field on existing messages_meta rows.
+			// Runs inside the upgrade transaction so it's atomic with the schema bump.
+			if (db.objectStoreNames.contains(STORES.MESSAGES_META)) {
+				// `runMigrations` is invoked from `onupgradeneeded`; the implicit
+				// versionchange transaction is reachable through the request that
+				// triggered the upgrade. We grab it from the open request below.
+			}
+		}
 		void to;
+	}
+
+	/**
+	 * Data-only migration for v1→v2. Called from `onupgradeneeded` with the
+	 * active versionchange transaction so reads + writes participate in the
+	 * same atomic upgrade.
+	 * [EDGE] Idempotent — rows that already carry `model` are skipped.
+	 */
+	function backfillMessageModelsV2(transaction) {
+		try {
+			if (!transaction || !transaction.objectStoreNames.contains(STORES.MESSAGES_META)) return;
+			const store = transaction.objectStore(STORES.MESSAGES_META);
+			const req = store.openCursor();
+			req.onsuccess = () => {
+				const cur = req.result;
+				if (!cur) return;
+				const row = cur.value;
+				if (row && 'string' !== typeof row.model) {
+					row.model = 'unknown';
+					try { cur.update(row); } catch { /* upgrade tx may be aborting */ }
+				}
+				cur.continue();
+			};
+			// onerror is non-fatal — the migration still completes.
+		} catch {
+			// [EDGE] Backfill is best-effort; absent rows just stay un-tagged.
+		}
 	}
 
 	/**
@@ -358,7 +404,11 @@
 				conversationId: meta.conversationId || null,
 				role: meta.role || null,
 				tokens: numOrNull(meta.tokens) ?? 0,
-				createdAt: numOrNull(meta.createdAt) ?? Date.now()
+				createdAt: numOrNull(meta.createdAt) ?? Date.now(),
+				// v2 fields. `unknown` keeps queries simple — model field always defined.
+				model: typeof meta.model === 'string' && meta.model.length > 0 ? meta.model : 'unknown',
+				hasAttachments: !!meta.hasAttachments,
+				snippet: typeof meta.snippet === 'string' ? meta.snippet.slice(0, 120) : null
 			});
 		} catch (e) {
 			reportError(e, 'db.putMessageMeta');
@@ -376,6 +426,168 @@
 			reportError(e, 'db.getMessagesByConversation');
 			return [];
 		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Daily rollups (v2)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Format an absolute timestamp as YYYY-MM-DD in the user's local timezone.
+	 * [EDGE] Falls back to UTC if Intl is unavailable.
+	 */
+	function localDateKey(tsMs) {
+		const ts = 'number' === typeof tsMs ? tsMs : Date.now();
+		const d = new Date(ts);
+		const y = d.getFullYear();
+		const m = String(d.getMonth() + 1).padStart(2, '0');
+		const day = String(d.getDate()).padStart(2, '0');
+		return `${y}-${m}-${day}`;
+	}
+
+	/** Inclusive [startMs, endMs] for a given local date key. */
+	function localDateBounds(dateKey) {
+		const [y, m, d] = dateKey.split('-').map((n) => parseInt(n, 10));
+		if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+		const start = new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+		const end = new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+		return { start, end };
+	}
+
+	async function putDailyRollup(rollup) {
+		if (!rollup || 'string' !== typeof rollup.date) return;
+		try {
+			await put(STORES.DAILY_ROLLUPS, rollup);
+		} catch (e) {
+			reportError(e, 'db.putDailyRollup');
+		}
+	}
+
+	async function getDailyRollups(sinceDateKey) {
+		const range = typeof sinceDateKey === 'string'
+			? IDBKeyRange.lowerBound(sinceDateKey, false)
+			: undefined;
+		try {
+			return await getAll(STORES.DAILY_ROLLUPS, range ? { query: range } : {});
+		} catch (e) {
+			reportError(e, 'db.getDailyRollups');
+			return [];
+		}
+	}
+
+	async function pruneOlderThan(store, tsField, cutoffMs) {
+		if ('number' !== typeof cutoffMs) return;
+		try {
+			const db = await open();
+			const transaction = db.transaction(store, 'readwrite');
+			const idx = (() => {
+				const oStore = transaction.objectStore(store);
+				if (oStore.indexNames.contains(`by-${tsField}`)) return oStore.index(`by-${tsField}`);
+				if (oStore.indexNames.contains('by-ts')) return oStore.index('by-ts');
+				if (oStore.indexNames.contains('by-createdAt')) return oStore.index('by-createdAt');
+				return oStore;
+			})();
+			const range = IDBKeyRange.upperBound(cutoffMs, true);
+			await new Promise((resolve, reject) => {
+				const req = idx.openCursor(range);
+				req.onsuccess = () => {
+					const cur = req.result;
+					if (!cur) { resolve(); return; }
+					try { cur.delete(); } catch { /* upgrade tx may be aborting */ }
+					cur.continue();
+				};
+				req.onerror = () => reject(req.error || new Error('prune cursor failed'));
+			});
+			await txDone(transaction);
+		} catch (e) {
+			reportError(e, 'db.pruneOlderThan');
+		}
+	}
+
+	/**
+	 * Drop daily_rollups whose date is older than (today - days).
+	 * [EDGE] Compares date strings lexicographically (YYYY-MM-DD is sortable).
+	 */
+	async function pruneRollupsOlderThanDays(days) {
+		if ('number' !== typeof days || days <= 0) return;
+		const cutoffKey = localDateKey(Date.now() - days * 86_400_000);
+		try {
+			const db = await open();
+			const transaction = db.transaction(STORES.DAILY_ROLLUPS, 'readwrite');
+			const range = IDBKeyRange.upperBound(cutoffKey, true);
+			await new Promise((resolve, reject) => {
+				const req = transaction.objectStore(STORES.DAILY_ROLLUPS).openCursor(range);
+				req.onsuccess = () => {
+					const cur = req.result;
+					if (!cur) { resolve(); return; }
+					try { cur.delete(); } catch { /* noop */ }
+					cur.continue();
+				};
+				req.onerror = () => reject(req.error || new Error('rollup prune failed'));
+			});
+			await txDone(transaction);
+		} catch (e) {
+			reportError(e, 'db.pruneRollupsOlderThanDays');
+		}
+	}
+
+	/**
+	 * Aggregate raw snapshots + messages for a given local date into one rollup.
+	 * Pure read — caller persists via `putDailyRollup`.
+	 */
+	async function buildDailyRollup(dateKey) {
+		const bounds = localDateBounds(dateKey);
+		if (!bounds) return null;
+		const { start, end } = bounds;
+
+		let peakSessionPct = null;
+		let peakWeeklyPct = null;
+		let snapshotCount = 0;
+		try {
+			const snaps = await getAll(STORES.SNAPSHOTS, {
+				index: 'by-ts',
+				query: IDBKeyRange.bound(start, end)
+			});
+			for (const s of snaps) {
+				snapshotCount++;
+				if ('number' === typeof s.sessionPct && (peakSessionPct === null || s.sessionPct > peakSessionPct)) {
+					peakSessionPct = s.sessionPct;
+				}
+				if ('number' === typeof s.weeklyPct && (peakWeeklyPct === null || s.weeklyPct > peakWeeklyPct)) {
+					peakWeeklyPct = s.weeklyPct;
+				}
+			}
+		} catch (e) { reportError(e, 'db.buildDailyRollup.snapshots'); }
+
+		let totalTokens = 0;
+		let messageCount = 0;
+		const modelBreakdown = { opus: 0, sonnet: 0, haiku: 0, other: 0, unknown: 0 };
+		try {
+			const messages = await getAll(STORES.MESSAGES_META, {
+				index: 'by-createdAt',
+				query: IDBKeyRange.bound(start, end)
+			});
+			for (const m of messages) {
+				messageCount++;
+				const t = numOrNull(m.tokens) ?? 0;
+				totalTokens += t;
+				const bucket = ['opus', 'sonnet', 'haiku'].includes(m.model)
+					? m.model
+					: (m.model === 'unknown' ? 'unknown' : 'other');
+				modelBreakdown[bucket] = (modelBreakdown[bucket] || 0) + t;
+			}
+		} catch (e) { reportError(e, 'db.buildDailyRollup.messages'); }
+
+		return {
+			date: dateKey,
+			peakSessionPct,
+			peakWeeklyPct,
+			totalTokens,
+			messageCount,
+			modelBreakdown,
+			snapshotCount,
+			rolledUpAt: Date.now()
+		};
 	}
 
 	/**
@@ -427,6 +639,13 @@
 		getSnapshotsSince,
 		putMessageMeta,
 		getMessagesByConversation,
+		putDailyRollup,
+		getDailyRollups,
+		pruneOlderThan,
+		pruneRollupsOlderThanDays,
+		buildDailyRollup,
+		localDateKey,
+		localDateBounds,
 		logToDb,
 		wipe
 	};
