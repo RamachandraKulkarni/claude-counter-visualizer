@@ -34,6 +34,14 @@
 		},
 		history: {
 			retentionDays: 90
+		},
+		memory: {
+			hotkey: 'Ctrl+Shift+P',
+			autoTagChatTitle: true,
+			autoTagDate: true,
+			autoTagModel: true,
+			defaultTags: [],
+			exportFormat: 'flat'
 		}
 	};
 
@@ -106,6 +114,14 @@
 		for (const input of inputsBound()) {
 			const path = input.getAttribute('data-setting');
 			if (!path) continue;
+
+			// Virtual setting: memory.defaultTagsRaw <-> memory.defaultTags[]
+			if (path === 'memory.defaultTagsRaw') {
+				const arr = getByPath(current, 'memory.defaultTags');
+				input.value = Array.isArray(arr) ? arr.join(', ') : '';
+				continue;
+			}
+
 			const value = getByPath(current, path);
 			if (input.type === 'checkbox') {
 				input.checked = !!value;
@@ -123,19 +139,65 @@
 		for (const input of inputsBound()) {
 			const path = input.getAttribute('data-setting');
 			if (!path) continue;
-			input.addEventListener('change', () => {
+			const handler = () => {
 				let value;
+				if (path === 'memory.defaultTagsRaw') {
+					// Virtual: split on comma, trim, drop empties. Persist to defaultTags.
+					value = input.value.split(',').map((s) => s.trim()).filter(Boolean);
+					setByPath(current, 'memory.defaultTags', value);
+					scheduleSave();
+					return;
+				}
 				if (input.type === 'checkbox') value = !!input.checked;
 				else if (input.type === 'number') {
 					const parsed = parseInt(input.value, 10);
 					if (Number.isNaN(parsed)) return;
-					// [VALIDATION] threshold range guard
-					if (parsed < 1 || parsed > 99) return;
+					// [VALIDATION] threshold range guard: 1-99 for percent, 30-365 for retention.
+					if (path.startsWith('thresholds.')) {
+						if (parsed < 1 || parsed > 99) return;
+					} else if (path === 'history.retentionDays') {
+						if (parsed < 30 || parsed > 365) return;
+					}
 					value = parsed;
 				}
 				else value = input.value;
 				setByPath(current, path, value);
 				scheduleSave();
+			};
+			input.addEventListener('change', handler);
+			if (input.type === 'text' || input.type === 'search' || input.type === 'number') {
+				// `change` only fires on blur for text inputs; debounce on input too.
+				input.addEventListener('input', handler);
+			}
+		}
+
+		// Wipe-pins button (Phase 3).
+		const wipePinsBtn = document.getElementById('cc-wipe-pins');
+		const wipePinsStatus = document.getElementById('cc-wipe-pins-status');
+		if (wipePinsBtn) {
+			wipePinsBtn.addEventListener('click', async () => {
+				const ok1 = window.confirm('Wipe ALL pinned messages? This cannot be undone.');
+				if (!ok1) return;
+				const ok2 = window.confirm('Are you absolutely sure? All pin data will be permanently deleted.');
+				if (!ok2) return;
+				try {
+					await wipeAllPins();
+					if (wipePinsStatus) wipePinsStatus.textContent = 'All pins cleared.';
+				} catch {
+					if (wipePinsStatus) wipePinsStatus.textContent = 'Wipe failed.';
+				}
+			});
+		}
+
+		// Shortcut rebind link — chrome:// URLs can't be opened from <a href>;
+		// route through tabs.create instead.
+		const shortcutLink = document.getElementById('cc-mem-shortcut-link');
+		if (shortcutLink) {
+			shortcutLink.addEventListener('click', (e) => {
+				e.preventDefault();
+				const tabs = globalThis.browser?.tabs || globalThis.chrome?.tabs;
+				try { tabs?.create?.({ url: 'chrome://extensions/shortcuts' }); }
+				catch { /* noop */ }
 			});
 		}
 
@@ -166,6 +228,25 @@
 			const span = document.getElementById('cc-version');
 			if (v && span) span.textContent = v;
 		} catch { /* noop */ }
+	}
+
+	async function wipeAllPins() {
+		return new Promise((resolve) => {
+			try {
+				const req = indexedDB.open('claude_counter_v1');
+				req.onsuccess = () => {
+					const db = req.result;
+					if (!db.objectStoreNames.contains('pins')) { resolve(); return; }
+					try {
+						const tx = db.transaction('pins', 'readwrite');
+						const clear = tx.objectStore('pins').clear();
+						clear.onsuccess = () => resolve();
+						clear.onerror = () => resolve();
+					} catch { resolve(); }
+				};
+				req.onerror = () => resolve();
+			} catch { resolve(); }
+		});
 	}
 
 	async function wipeIndexedDb() {

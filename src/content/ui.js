@@ -987,7 +987,73 @@
 		}
 	}
 
+	/**
+	 * Lazy-create the toast layer node. Single host for all stacked toasts.
+	 * [ACCESSIBILITY] aria-live polite so screen readers announce without
+	 * interrupting the user.
+	 */
+	function ensureToastLayer() {
+		let layer = document.getElementById('cc-toastLayer');
+		if (layer) return layer;
+		layer = document.createElement('div');
+		layer.id = 'cc-toastLayer';
+		layer.className = 'cc-toastLayer';
+		layer.setAttribute('aria-live', 'polite');
+		layer.setAttribute('role', 'status');
+		document.body.appendChild(layer);
+		return layer;
+	}
+
+	/**
+	 * Show a transient toast. Returns a `{ dismiss }` controller.
+	 *
+	 * @param {string} text - Body text.
+	 * @param {object} [opts]
+	 * @param {number} [opts.duration=2000] - ms before auto-dismiss.
+	 * @param {{label:string, onClick:Function}} [opts.action] - Optional action button.
+	 */
+	function showToast(text, opts = {}) {
+		if ('string' !== typeof text) return { dismiss: () => {} };
+		const duration = 'number' === typeof opts.duration && opts.duration > 0
+			? opts.duration : 2000;
+		const layer = ensureToastLayer();
+
+		const node = document.createElement('div');
+		node.className = 'cc-toast';
+		const span = document.createElement('span');
+		// [SECURITY] textContent — never innerHTML — keeps toast text safe.
+		span.textContent = text;
+		node.appendChild(span);
+
+		let dismissed = false;
+		let timer = null;
+		const dismiss = () => {
+			if (dismissed) return;
+			dismissed = true;
+			if (timer) clearTimeout(timer);
+			node.classList.remove('cc-toast--visible');
+			setTimeout(() => { try { node.remove(); } catch { /* noop */ } }, 220);
+		};
+
+		if (opts.action && typeof opts.action.onClick === 'function') {
+			const btn = document.createElement('button');
+			btn.type = 'button';
+			btn.textContent = String(opts.action.label || 'Undo');
+			btn.addEventListener('click', () => {
+				try { opts.action.onClick(); } catch { /* noop */ }
+				dismiss();
+			});
+			node.appendChild(btn);
+		}
+
+		layer.appendChild(node);
+		requestAnimationFrame(() => node.classList.add('cc-toast--visible'));
+		timer = setTimeout(dismiss, duration);
+		return { dismiss };
+	}
+
 	CC.ui = {
-		CounterUI
+		CounterUI,
+		showToast
 	};
 })();

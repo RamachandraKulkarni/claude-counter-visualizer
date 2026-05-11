@@ -26,7 +26,11 @@ const KIND = Object.freeze({
 	ROLLUPS_GET: 'rollups.get',
 	STORAGE_ESTIMATE: 'storage.estimate',
 	OPEN_FORENSICS: 'open.forensics',
-	MESSAGES_FOR_CONVERSATION: 'messages.forConversation'
+	MESSAGES_FOR_CONVERSATION: 'messages.forConversation',
+	// Phase 3 — pins & re-injection
+	PIN_HOTKEY: 'pin.fromHotkey',
+	PIN_CONTEXT_MENU: 'pin.fromContextMenu',
+	COMPOSER_INSERT: 'composer.insert'
 });
 
 // [CONFIG] Defaults seeded on install. Mirrors options page UI.
@@ -53,8 +57,12 @@ const DEFAULT_SETTINGS = Object.freeze({
 		contextHealth: { moderate: 50, near: 75, critical: 90 }
 	},
 	memory: {
-		hotkey: 'P',
-		defaultTags: []
+		hotkey: 'Ctrl+Shift+P',         // displayed; the real binding lives in manifest commands
+		autoTagChatTitle: true,
+		autoTagDate: true,
+		autoTagModel: true,
+		defaultTags: [],
+		exportFormat: 'flat'             // 'flat' | 'by-project'
 	},
 	history: {
 		// [CONFIG] Days of daily_rollups to retain. PRD F8 range 30-365.
@@ -177,6 +185,34 @@ function sendToTab(tabId, kind, payload) {
 		const ret = tabsApi.sendMessage(tabId, { kind, payload }, cb);
 		if (ret && typeof ret.then === 'function') ret.then(() => {}, () => {});
 	} catch { /* tab unreachable */ }
+}
+
+/**
+ * Find the most relevant claude.ai tab (active in current window first, then
+ * any) and forward a message kind to it. Used by chrome.commands and the
+ * context menu so the content script can act on the user's current chat.
+ */
+async function relayToActiveClaudeTab(kind, payload) {
+	if (!tabsApi?.query) return false;
+	const queryActive = await new Promise((resolve) => {
+		try {
+			const ret = tabsApi.query({ url: 'https://claude.ai/*', active: true, currentWindow: true }, (t) => resolve(t || []));
+			if (ret && typeof ret.then === 'function') ret.then(resolve, () => resolve([]));
+		} catch { resolve([]); }
+	});
+	let target = queryActive[0];
+	if (!target) {
+		const queryAny = await new Promise((resolve) => {
+			try {
+				const ret = tabsApi.query({ url: 'https://claude.ai/*' }, (t) => resolve(t || []));
+				if (ret && typeof ret.then === 'function') ret.then(resolve, () => resolve([]));
+			} catch { resolve([]); }
+		});
+		target = queryAny[0];
+	}
+	if (!target) return false;
+	sendToTab(target.id, kind, payload);
+	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -749,6 +785,39 @@ if (runtime?.onMessage?.addListener) {
 					return;
 				}
 
+				case KIND.COMPOSER_INSERT: {
+					if (!tabsApi?.query) { sendResponse({ ok: false }); return; }
+					const text = msg.payload?.text || '';
+					if ('string' !== typeof text || 0 === text.length) {
+						sendResponse({ ok: false, error: 'empty text' });
+						return;
+					}
+					try {
+						const tabs = await new Promise((resolve) => {
+							const ret = tabsApi.query({ url: 'https://claude.ai/*', active: true, currentWindow: true }, (t) => resolve(t || []));
+							if (ret && typeof ret.then === 'function') ret.then(resolve, () => resolve([]));
+						});
+						let target = tabs[0];
+						if (!target) {
+							const any = await new Promise((resolve) => {
+								const ret = tabsApi.query({ url: 'https://claude.ai/*' }, (t) => resolve(t || []));
+								if (ret && typeof ret.then === 'function') ret.then(resolve, () => resolve([]));
+							});
+							target = any[0];
+						}
+						if (!target) { sendResponse({ ok: false, error: 'no claude.ai tab' }); return; }
+						// Bring the tab forward so the user sees the insertion.
+						tabsApi.update(target.id, { active: true });
+						const windows = globalThis.browser?.windows || globalThis.chrome?.windows;
+						if (target.windowId !== undefined) windows?.update?.(target.windowId, { focused: true });
+						sendToTab(target.id, KIND.COMPOSER_INSERT, { text });
+						sendResponse({ ok: true });
+					} catch (e) {
+						sendResponse({ ok: false, error: e?.message });
+					}
+					return;
+				}
+
 				case KIND.OPEN_FORENSICS: {
 					if (!tabsApi?.create || !runtime?.getURL) { sendResponse({ ok: false }); return; }
 					const conversationId = typeof msg.payload?.conversationId === 'string'
@@ -865,6 +934,45 @@ if (runtime?.onInstalled?.addListener) {
 		scheduleDailyRollupAlarm();
 		// Run catch-up immediately so users see history without waiting overnight.
 		runRollupCatchup().catch((e) => log('warn', 'initial catchup failed', { error: e?.message }));
+		setupContextMenus();
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 — chrome.commands + contextMenus
+// ---------------------------------------------------------------------------
+
+const commands = globalThis.browser?.commands || globalThis.chrome?.commands || null;
+const contextMenus = globalThis.browser?.contextMenus || globalThis.chrome?.contextMenus || null;
+
+if (commands?.onCommand?.addListener) {
+	commands.onCommand.addListener(async (name) => {
+		if (name !== 'pin-focused-message') return;
+		await relayToActiveClaudeTab(KIND.PIN_HOTKEY, {});
+	});
+}
+
+function setupContextMenus() {
+	if (!contextMenus?.create) return;
+	try {
+		contextMenus.removeAll(() => {
+			try {
+				contextMenus.create({
+					id: 'cc-pin-message',
+					title: 'Pin this message to Claude Counter',
+					contexts: ['page', 'selection', 'link'],
+					documentUrlPatterns: ['https://claude.ai/*']
+				}, () => { void runtime?.lastError; });
+			} catch (e) { log('warn', 'contextMenus.create failed', { error: e?.message }); }
+		});
+	} catch (e) { log('warn', 'contextMenus.setup failed', { error: e?.message }); }
+}
+
+if (contextMenus?.onClicked?.addListener) {
+	contextMenus.onClicked.addListener(async (info, tab) => {
+		if (info?.menuItemId !== 'cc-pin-message') return;
+		if (!tab?.id) { await relayToActiveClaudeTab(KIND.PIN_CONTEXT_MENU, {}); return; }
+		sendToTab(tab.id, KIND.PIN_CONTEXT_MENU, {});
 	});
 }
 
@@ -873,5 +981,6 @@ if (runtime?.onStartup?.addListener) {
 		log('info', 'startup');
 		scheduleDailyRollupAlarm();
 		runRollupCatchup().catch((e) => log('warn', 'startup catchup failed', { error: e?.message }));
+		setupContextMenus();
 	});
 }

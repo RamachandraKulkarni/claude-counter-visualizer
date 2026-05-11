@@ -501,3 +501,105 @@ html.cc-hide-weekly .cc-usageCompact:nth-of-type(2) { display: none !important; 
 html.cc-compact .cc-header { gap: 4px; }
 html.cc-compact .cc-headerMeta { gap: 4px; font-size: 10px; }
 html.cc-compact .cc-est { padding: 1px 6px; font-size: 10px; }
+
+/* ---------- Phase 3: pinning ---------- */
+
+/* Pin icon shown in message action toolbars (F11). Outlined by default,
+   solid when the message has a saved pin record. Always keyboard-focusable. */
+.cc-pinIcon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border: none;
+	background: transparent;
+	color: var(--cc-header-muted, currentColor);
+	border-radius: 6px;
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+	padding: 0;
+	margin: 0 4px;
+}
+
+.cc-pinIcon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+
+/* Show on message hover or when focused (keyboard nav). */
+.cc-msgRoot:hover .cc-pinIcon,
+.cc-msgRoot:focus-within .cc-pinIcon,
+.cc-pinIcon:focus-visible,
+.cc-pinIcon--active {
+	opacity: 1;
+}
+
+.cc-pinIcon:hover { background: rgba(140, 140, 140, 0.14); }
+.cc-pinIcon:focus-visible { outline: 2px solid #5aa6ff; outline-offset: 1px; }
+
+.cc-pinIcon--active {
+	color: #5aa6ff;
+}
+
+.cc-pinIcon--active svg {
+	fill: currentColor;
+	stroke: currentColor;
+}
+
+/* Subtle left border on pinned messages. */
+.cc-pinnedMsg {
+	box-shadow: inset 3px 0 0 0 #5aa6ff;
+	border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.cc-pinIcon { transition: none; }
+}
+
+/* Toast — shared by pin/unpin/copy/etc. Bottom-right of viewport, stacks. */
+.cc-toastLayer {
+	position: fixed;
+	right: 18px;
+	bottom: 18px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	z-index: 2147483646;
+	pointer-events: none;
+}
+
+.cc-toast {
+	background: var(--cc-tooltip-bg, rgba(36, 31, 24, 0.95));
+	color: var(--cc-tooltip-text, #f5f1e8);
+	border: 1px solid var(--cc-tooltip-border, rgba(255, 248, 236, 0.12));
+	padding: 8px 14px;
+	border-radius: 8px;
+	font-size: 12px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+	pointer-events: auto;
+	opacity: 0;
+	transform: translateY(6px);
+	transition: opacity 160ms ease, transform 160ms ease;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.cc-toast--visible { opacity: 1; transform: translateY(0); }
+
+.cc-toast button {
+	background: transparent;
+	color: inherit;
+	border: 1px solid rgba(255, 255, 255, 0.25);
+	border-radius: 6px;
+	padding: 2px 8px;
+	font: inherit;
+	font-size: 11px;
+	cursor: pointer;
+}
+
+.cc-toast button:hover { background: rgba(255, 255, 255, 0.08); }
+.cc-toast button:focus-visible { outline: 2px solid #5aa6ff; }
+
+@media (prefers-reduced-motion: reduce) {
+	.cc-toast { transition: opacity 60ms linear; transform: none; }
+}

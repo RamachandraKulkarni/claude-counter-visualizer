@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Claude Counter",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "browser_specific_settings": {
     "gecko": {
       "id": "{236c6889-52b6-4454-bc4b-5a2ad18effa2}",
@@ -44,8 +44,18 @@
     "storage",
     "alarms",
     "notifications",
-    "tabs"
+    "tabs",
+    "contextMenus"
   ],
+  "commands": {
+    "pin-focused-message": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+P",
+        "mac": "Command+Shift+P"
+      },
+      "description": "Pin the currently hovered or focused message"
+    }
+  },
   "content_scripts": [
     {
       "matches": [
@@ -71,6 +81,8 @@
         "src/content/model-stats.js",
         "src/content/ui.js",
         "src/content/estimator.js",
+        "src/content/pin.js",
+        "src/content/injection.js",
         "src/content/main.js"
       ]
     }

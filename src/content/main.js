@@ -372,6 +372,12 @@
 			CC.estimator.setTrunkTokens(metrics.totalTokens || 0);
 		}
 
+		// [CONFIG] Phase 3 — share the trunk metadata so pin.js can resolve
+		// DOM positions to message UUIDs even when claude.ai doesn't expose
+		// them as attributes.
+		CC.lastTrunkMessageMeta = Array.isArray(metrics.perMessage) ? metrics.perMessage : [];
+		if (CC.pin?.onConversationLoaded) CC.pin.onConversationLoaded();
+
 		// Persist per-message metadata for burn-rate calculation + Phase 2 model
 		// stats. Prefer the per-message model from the payload; otherwise fall
 		// back to the current active model (best-effort tagging).
@@ -522,6 +528,10 @@
 	if (CC.modelDetect?.initialize) {
 		try { CC.modelDetect.initialize(); } catch (e) { reportError(e, 'modelDetect.initialize'); }
 	}
+	// [CONFIG] Phase 3 — pin module (icon injection + hotkey/context-menu).
+	if (CC.pin?.initialize) {
+		try { CC.pin.initialize(); } catch (e) { reportError(e, 'pin.initialize'); }
+	}
 
 	// [SECURITY] Listen for service-worker messages (settings changes, scroll-to).
 	if (messaging?.onMessage) {
@@ -543,6 +553,19 @@
 				// [EDGE] Popup falls back to this when the SW cache is empty
 				// (e.g. first install before any snapshot was persisted).
 				return { ok: true, state: getLiveState() };
+			}
+			if (msg.kind === messaging.KIND.PIN_HOTKEY) {
+				if (CC.pin?.pinByHotkey) CC.pin.pinByHotkey();
+				return { ok: true };
+			}
+			if (msg.kind === messaging.KIND.PIN_CONTEXT_MENU) {
+				if (CC.pin?.pinByContextMenu) CC.pin.pinByContextMenu();
+				return { ok: true };
+			}
+			if (msg.kind === messaging.KIND.COMPOSER_INSERT) {
+				const text = msg.payload?.text || '';
+				const ok = CC.injection?.insertIntoComposer?.(text) ?? false;
+				return { ok, hasComposer: !!CC.injection?.pickComposer?.() };
 			}
 			return undefined;
 		});
@@ -579,6 +602,8 @@
 	function applySettings(settings) {
 		if (!settings || 'object' !== typeof settings) return;
 		activeSettings = settings;
+		// [CONFIG] Expose for sibling content modules (pin.js reads memory prefs).
+		CC.activeSettings = settings;
 		// [CONFIG] Display toggles — hide/show header parts in-place.
 		const root = document.documentElement;
 		const d = settings.display || {};

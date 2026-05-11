@@ -9,7 +9,35 @@
 		CHAT_PROJECT_WRAPPER: '.chat-project-wrapper',
 		BRIDGE_SCRIPT_ID: 'cc-bridge-script',
 		// [CONFIG] Phase 2 — active model label lives inside the model selector trigger.
-		ACTIVE_MODEL_LABEL: '[data-testid="model-selector-dropdown"]'
+		ACTIVE_MODEL_LABEL: '[data-testid="model-selector-dropdown"]',
+		// [CONFIG] Phase 3 selectors. Each tolerates multiple fallback variants
+		// because per-message DOM is the most fragile dependency in the project.
+		// pin.js iterates these in order and gracefully degrades if none match.
+		MESSAGE_CONTAINERS: [
+			'[data-test-render-count]',
+			'[data-testid^="user-message"]',
+			'[data-testid^="message-"]',
+			'article[data-message-id]',
+			'div[data-message-id]',
+			'[data-test-message]'
+		],
+		MESSAGE_ACTION_TOOLBAR_CANDIDATES: [
+			'[data-testid="message-actions"]',
+			'[data-testid="user-action-buttons"]',
+			'[role="toolbar"]'
+		],
+		MESSAGE_UUID_ATTRS: ['data-message-uuid', 'data-uuid', 'data-message-id', 'data-test-message-id'],
+		COMPOSER_CANDIDATES: [
+			'[contenteditable="true"][data-testid]',
+			'div.ProseMirror[contenteditable="true"]',
+			'[role="textbox"][contenteditable="true"]'
+		],
+		CHAT_TITLE_CANDIDATES: [
+			'[data-testid="chat-menu-trigger"] [data-testid="chat-title"]',
+			'[data-testid="chat-menu-trigger"]',
+			'header [data-testid="chat-title"]',
+			'h1, h2'
+		]
 	});
 
 	CC.CONST = Object.freeze({

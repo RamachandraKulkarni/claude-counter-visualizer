@@ -10,12 +10,16 @@
 	<header class="cc-popup-header">
 		<div class="cc-popup-title">
 			<span class="cc-popup-name">Claude Counter</span>
-			<span class="cc-popup-version" id="cc-version" aria-label="Version">v0.5.0</span>
+			<span class="cc-popup-version" id="cc-version" aria-label="Version">v0.7.0</span>
 		</div>
+		<nav class="cc-tabs" role="tablist" aria-label="Sections">
+			<button type="button" class="cc-tab cc-tab--active" id="cc-tab-dashboard-btn" role="tab" aria-selected="true" aria-controls="cc-tab-dashboard">Dashboard</button>
+			<button type="button" class="cc-tab" id="cc-tab-memory-btn" role="tab" aria-selected="false" aria-controls="cc-tab-memory">Memory <span class="cc-tab-badge" id="cc-pin-count" hidden></span></button>
+		</nav>
 		<div class="cc-popup-stale" id="cc-stale" hidden></div>
 	</header>
 
-	<main class="cc-popup-main" role="main">
+	<main class="cc-popup-main" role="main" id="cc-tab-dashboard">
 
 		<!-- NOW CARD -->
 		<section class="cc-card" id="cc-card-now" aria-labelledby="cc-card-now-title" tabindex="0">
@@ -130,6 +134,68 @@
 
 	</main>
 
+	<!-- MEMORY TAB (Phase 3) -->
+	<main class="cc-popup-main cc-mem" id="cc-tab-memory" role="tabpanel" aria-labelledby="cc-tab-memory-btn" hidden>
+		<section class="cc-mem-filters" aria-label="Filter pins">
+			<input type="search" class="cc-mem-search" id="cc-mem-search" placeholder="Search pins…" aria-label="Search pins">
+			<div class="cc-mem-filter-row">
+				<select class="cc-mem-project" id="cc-mem-project" aria-label="Filter by chat">
+					<option value="">All chats</option>
+				</select>
+				<select class="cc-mem-range" id="cc-mem-range" aria-label="Filter by date range">
+					<option value="all">All time</option>
+					<option value="today">Today</option>
+					<option value="7d">Last 7 days</option>
+					<option value="30d">Last 30 days</option>
+				</select>
+			</div>
+			<div class="cc-mem-tags" id="cc-mem-tags" role="group" aria-label="Tag filters"></div>
+			<div class="cc-mem-active-filters" id="cc-mem-active-filters" hidden></div>
+		</section>
+
+		<div class="cc-mem-toolbar">
+			<label class="cc-mem-selectall">
+				<input type="checkbox" id="cc-mem-selectall"> Select all visible
+			</label>
+			<span class="cc-mem-count" id="cc-mem-count" aria-live="polite">0 pins</span>
+		</div>
+
+		<div class="cc-mem-listwrap">
+			<ul class="cc-mem-list" id="cc-mem-list" role="list"></ul>
+			<div class="cc-mem-empty" id="cc-mem-empty" hidden>
+				<p>No pins yet.</p>
+				<p class="cc-mem-empty-hint">Hover a message on claude.ai and click the pin icon, or press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>.</p>
+			</div>
+		</div>
+
+		<footer class="cc-mem-bulk" id="cc-mem-bulk" hidden>
+			<span class="cc-mem-bulk-count" id="cc-mem-bulk-count">0 selected</span>
+			<div class="cc-mem-bulk-actions">
+				<button type="button" id="cc-mem-bulk-copy">Copy</button>
+				<button type="button" id="cc-mem-bulk-export">Export</button>
+				<button type="button" id="cc-mem-bulk-insert">Insert</button>
+				<button type="button" id="cc-mem-bulk-unpin" class="cc-btn-danger">Unpin</button>
+			</div>
+		</footer>
+	</main>
+
+	<!-- Re-injection preview modal (F14) -->
+	<div class="cc-modal" id="cc-inject-modal" role="dialog" aria-modal="true" aria-labelledby="cc-inject-title" hidden>
+		<div class="cc-modal-backdrop" id="cc-inject-backdrop"></div>
+		<div class="cc-modal-body" tabindex="-1">
+			<header class="cc-modal-header">
+				<h2 id="cc-inject-title">Insert into composer</h2>
+				<button type="button" id="cc-inject-close" aria-label="Close">✕</button>
+			</header>
+			<div class="cc-modal-meta" id="cc-inject-meta">—</div>
+			<pre class="cc-modal-preview" id="cc-inject-preview" tabindex="0"></pre>
+			<footer class="cc-modal-actions">
+				<button type="button" id="cc-inject-cancel">Cancel</button>
+				<button type="button" id="cc-inject-confirm" class="cc-mem-primary">Insert</button>
+			</footer>
+		</div>
+	</div>
+
 	<footer class="cc-popup-footer">
 		<button type="button" class="cc-icon-btn" id="cc-open-options" aria-label="Open settings" title="Settings">
 			<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true" focusable="false">
@@ -141,6 +207,7 @@
 		<a href="https://claude.ai/" target="_blank" rel="noopener" class="cc-link" id="cc-claude-link">claude.ai</a>
 	</footer>
 
+	<script src="../vendor/cc-zip.js"></script>
 	<script src="popup.js"></script>
 </body>
 </html>

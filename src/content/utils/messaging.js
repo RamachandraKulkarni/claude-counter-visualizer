@@ -24,7 +24,14 @@
 		ROLLUPS_GET: 'rollups.get',
 		STORAGE_ESTIMATE: 'storage.estimate',
 		OPEN_FORENSICS: 'open.forensics',
-		MESSAGES_FOR_CONVERSATION: 'messages.forConversation'
+		MESSAGES_FOR_CONVERSATION: 'messages.forConversation',
+		// Phase 3 — memory pin/inject lifecycle.
+		PIN_HOTKEY: 'pin.fromHotkey',
+		PIN_CONTEXT_MENU: 'pin.fromContextMenu',
+		COMPOSER_INSERT: 'composer.insert',
+		PINS_GET: 'pins.get',
+		PIN_TOGGLE: 'pin.toggle',
+		PINS_WIPE: 'pins.wipe'
 	});
 
 	const VALID_KINDS = new Set(Object.values(KIND));

@@ -7,7 +7,7 @@
 
 	// [CONFIG] Schema version. Bump on every breaking change and add a migration step.
 	const DB_NAME = 'claude_counter_v1';
-	const DB_VERSION = 2;
+	const DB_VERSION = 3;
 
 	// [CONFIG] Object stores. Stays in lockstep with ARCHITECTURE.md.
 	const STORES = Object.freeze({
@@ -61,14 +61,12 @@
 
 			req.onupgradeneeded = (event) => {
 				const db = req.result;
+				const tx = req.transaction;
 				const oldVersion = event.oldVersion || 0;
 				try {
-					runMigrations(db, oldVersion, DB_VERSION);
+					runMigrations(db, tx, oldVersion, DB_VERSION);
 					// [CONFIG] Data-only migrations that need the active upgrade tx.
-					if (oldVersion < 2) {
-						const tx = req.transaction;
-						if (tx) backfillMessageModelsV2(tx);
-					}
+					if (oldVersion < 2 && tx) backfillMessageModelsV2(tx);
 				} catch (e) {
 					reportError(e, 'db.migrate');
 				}
@@ -106,7 +104,7 @@
 	 * @param {number} from
 	 * @param {number} to
 	 */
-	function runMigrations(db, from, to) {
+	function runMigrations(db, tx, from, to) {
 		// v0 -> v1: initial schema
 		if (from < 1) {
 			if (!db.objectStoreNames.contains(STORES.SNAPSHOTS)) {
@@ -134,6 +132,7 @@
 				s.createIndex('by-tag', 'tags', { unique: false, multiEntry: true });
 				s.createIndex('by-conversation', 'conversationId', { unique: false });
 				s.createIndex('by-createdAt', 'createdAt', { unique: false });
+				s.createIndex('by-messageUuid', 'messageUuid', { unique: false });
 			}
 			if (!db.objectStoreNames.contains(STORES.LINKS)) {
 				const s = db.createObjectStore(STORES.LINKS, { keyPath: 'id' });
@@ -143,6 +142,19 @@
 			if (!db.objectStoreNames.contains(STORES.ERRORS_LOG)) {
 				const s = db.createObjectStore(STORES.ERRORS_LOG, { keyPath: 'id', autoIncrement: true });
 				s.createIndex('by-ts', 'ts', { unique: false });
+			}
+		}
+		// v2 -> v3: pins gain `by-messageUuid` index for fast pin-state lookups.
+		// The pins store itself was pre-created at v1 along with by-project,
+		// by-tag, by-conversation, by-createdAt indexes.
+		if (from < 3) {
+			if (tx && db.objectStoreNames.contains(STORES.PINS)) {
+				try {
+					const pinsStore = tx.objectStore(STORES.PINS);
+					if (!pinsStore.indexNames.contains('by-messageUuid')) {
+						pinsStore.createIndex('by-messageUuid', 'messageUuid', { unique: false });
+					}
+				} catch { /* upgrade tx may be aborting */ }
 			}
 		}
 		// v1 -> v2: daily rollups + model tagging
@@ -590,6 +602,117 @@
 		};
 	}
 
+	// -------------------------------------------------------------------------
+	// Pins (Phase 3)
+	// -------------------------------------------------------------------------
+
+	function _uuid() {
+		// [SECURITY] Prefer crypto.randomUUID; fall back to a v4-ish generator.
+		if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+		return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+			const r = Math.random() * 16 | 0;
+			const v = c === 'x' ? r : (r & 0x3 | 0x8);
+			return v.toString(16);
+		});
+	}
+
+	async function putPin(pin) {
+		if (!pin || 'object' !== typeof pin) return null;
+		const row = {
+			id: typeof pin.id === 'string' ? pin.id : _uuid(),
+			conversationId: typeof pin.conversationId === 'string' ? pin.conversationId : null,
+			messageUuid: typeof pin.messageUuid === 'string' ? pin.messageUuid : null,
+			projectId: typeof pin.projectId === 'string' ? pin.projectId : null,
+			role: typeof pin.role === 'string' ? pin.role : 'unknown',
+			content: typeof pin.content === 'string' ? pin.content : '',
+			tokenCount: numOrNull(pin.tokenCount) ?? 0,
+			tags: Array.isArray(pin.tags) ? pin.tags.filter((t) => typeof t === 'string') : [],
+			createdAt: numOrNull(pin.createdAt) ?? Date.now(),
+			sourceUrl: typeof pin.sourceUrl === 'string' ? pin.sourceUrl : null,
+			chatTitle: typeof pin.chatTitle === 'string' ? pin.chatTitle : null,
+			model: typeof pin.model === 'string' ? pin.model : 'unknown',
+			embedding: null  // reserved for Phase 5
+		};
+		try {
+			await put(STORES.PINS, row);
+			return row;
+		} catch (e) {
+			reportError(e, 'db.putPin');
+			return null;
+		}
+	}
+
+	async function deletePin(id) {
+		if ('string' !== typeof id || 0 === id.length) return false;
+		try {
+			await del(STORES.PINS, id);
+			return true;
+		} catch (e) {
+			reportError(e, 'db.deletePin');
+			return false;
+		}
+	}
+
+	async function getAllPins() {
+		try {
+			return await getAll(STORES.PINS);
+		} catch (e) {
+			reportError(e, 'db.getAllPins');
+			return [];
+		}
+	}
+
+	async function getPinsForConversation(conversationId) {
+		if ('string' !== typeof conversationId) return [];
+		try {
+			return await getAll(STORES.PINS, {
+				index: 'by-conversation',
+				query: IDBKeyRange.only(conversationId)
+			});
+		} catch (e) {
+			reportError(e, 'db.getPinsForConversation');
+			return [];
+		}
+	}
+
+	async function getPinByMessageUuid(messageUuid) {
+		if ('string' !== typeof messageUuid) return null;
+		try {
+			const matches = await getAll(STORES.PINS, {
+				index: 'by-messageUuid',
+				query: IDBKeyRange.only(messageUuid)
+			});
+			return matches[0] || null;
+		} catch (e) {
+			reportError(e, 'db.getPinByMessageUuid');
+			return null;
+		}
+	}
+
+	async function getPinsCount() {
+		try {
+			const db = await open();
+			const tx = db.transaction(STORES.PINS, 'readonly');
+			return await promisifyRequest(tx.objectStore(STORES.PINS).count());
+		} catch (e) {
+			reportError(e, 'db.getPinsCount');
+			return 0;
+		}
+	}
+
+	async function clearPins() {
+		try {
+			const db = await open();
+			const tx = db.transaction(STORES.PINS, 'readwrite');
+			await promisifyRequest(tx.objectStore(STORES.PINS).clear());
+			await txDone(tx);
+			return true;
+		} catch (e) {
+			reportError(e, 'db.clearPins');
+			return false;
+		}
+	}
+
 	/**
 	 * Wipe all extension data.
 	 * [SECURITY] Used by the "Wipe all data" option. Confirmation handled in UI.
@@ -646,6 +769,13 @@
 		buildDailyRollup,
 		localDateKey,
 		localDateBounds,
+		putPin,
+		deletePin,
+		getAllPins,
+		getPinsForConversation,
+		getPinByMessageUuid,
+		getPinsCount,
+		clearPins,
 		logToDb,
 		wipe
 	};

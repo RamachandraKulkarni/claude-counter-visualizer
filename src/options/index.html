@@ -75,13 +75,36 @@
 		</section>
 
 		<section class="cc-section" aria-labelledby="cc-sec-memory">
-			<h2 id="cc-sec-memory">Memory <span class="cc-pill">v0.7</span></h2>
-			<p class="cc-help">Pinning, browsing, and Obsidian export. Coming in a later release.</p>
-			<fieldset disabled class="cc-disabled">
-				<label class="cc-row-label">Pin hotkey
-					<input type="text" value="P" readonly>
-				</label>
-			</fieldset>
+			<h2 id="cc-sec-memory">Memory</h2>
+			<p class="cc-help">Pin Claude messages locally, browse them, export to Obsidian, and re-inject into new chats.</p>
+
+			<label class="cc-row-label">Pin hotkey
+				<input type="text" value="Ctrl+Shift+P" readonly>
+				<a href="chrome://extensions/shortcuts" id="cc-mem-shortcut-link">Rebind</a>
+			</label>
+
+			<p class="cc-help" style="margin-top: 14px;">Tags automatically applied to new pins:</p>
+			<div class="cc-grid">
+				<label><input type="checkbox" data-setting="memory.autoTagChatTitle"> Chat title</label>
+				<label><input type="checkbox" data-setting="memory.autoTagDate"> Date</label>
+				<label><input type="checkbox" data-setting="memory.autoTagModel"> Model name</label>
+			</div>
+
+			<label class="cc-row-label" style="margin-top: 6px;">Default tags (comma-separated)
+				<input type="text" data-setting="memory.defaultTagsRaw" placeholder="research, longterm">
+			</label>
+
+			<label class="cc-row-label">Export layout
+				<select data-setting="memory.exportFormat">
+					<option value="flat">One folder, all pins</option>
+					<option value="by-project">Subfolder per chat</option>
+				</select>
+			</label>
+
+			<div class="cc-row-label" style="margin-top: 10px;">
+				<button type="button" class="cc-btn cc-btn-danger" id="cc-wipe-pins">Wipe all pins</button>
+				<span class="cc-status" id="cc-wipe-pins-status" aria-live="polite"></span>
+			</div>
 		</section>
 
 		<section class="cc-section cc-danger" aria-labelledby="cc-sec-danger">
