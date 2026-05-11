@@ -1,0 +1,31 @@
+# Claude Code workspace state — local only
+.claude/
+
+# code-review-graph local cache (auto-rebuilt)
+.code-review-graph/
+
+# Firefox signing artifacts — regenerated per release
+META-INF/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build / release artifacts
+*.zip
+*.xpi
+dist/
+build/
+
+# Node / tooling (not used today, but defended)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

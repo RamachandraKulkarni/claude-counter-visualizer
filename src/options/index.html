@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<title>Claude Counter — Settings</title>
+	<link rel="stylesheet" href="options.css">
+</head>
+<body class="cc-opts">
+	<header class="cc-opts-header">
+		<h1>Claude Counter — Settings</h1>
+		<p class="cc-opts-sub">All data is local. No analytics, no remote calls.</p>
+	</header>
+
+	<main>
+		<section class="cc-section" aria-labelledby="cc-sec-display">
+			<h2 id="cc-sec-display">Display</h2>
+			<div class="cc-grid">
+				<label><input type="checkbox" data-setting="display.showTokens"> Show token count</label>
+				<label><input type="checkbox" data-setting="display.showCache"> Show cache timer</label>
+				<label><input type="checkbox" data-setting="display.showContext"> Show context indicator</label>
+				<label><input type="checkbox" data-setting="display.showSession"> Show session bar</label>
+				<label><input type="checkbox" data-setting="display.showWeekly"> Show weekly bar</label>
+				<label><input type="checkbox" data-setting="display.showBurnRate"> Show burn rate</label>
+				<label><input type="checkbox" data-setting="display.compact"> Compact layout</label>
+			</div>
+			<label class="cc-row-label">
+				Theme
+				<select data-setting="display.themeOverride">
+					<option value="auto">Match OS</option>
+					<option value="light">Light</option>
+					<option value="dark">Dark</option>
+				</select>
+			</label>
+		</section>
+
+		<section class="cc-section" aria-labelledby="cc-sec-notifs">
+			<h2 id="cc-sec-notifs">Notifications</h2>
+			<label><input type="checkbox" data-setting="notifications.muted"> Mute all notifications</label>
+			<div class="cc-grid">
+				<label><input type="checkbox" data-setting="notifications.enabled75"> Notify at 75%</label>
+				<label><input type="checkbox" data-setting="notifications.enabled90"> Notify at 90%</label>
+				<label><input type="checkbox" data-setting="notifications.enabled95"> Notify at 95%</label>
+			</div>
+		</section>
+
+		<section class="cc-section" aria-labelledby="cc-sec-thresh">
+			<h2 id="cc-sec-thresh">Thresholds</h2>
+			<p class="cc-help">Percentages at which Claude Counter will fire a notification on session or weekly windows.</p>
+			<div class="cc-thresholds">
+				<label>Session
+					<input type="number" min="1" max="99" step="1" data-setting="thresholds.session.0">
+					<input type="number" min="1" max="99" step="1" data-setting="thresholds.session.1">
+					<input type="number" min="1" max="99" step="1" data-setting="thresholds.session.2">
+				</label>
+				<label>Weekly
+					<input type="number" min="1" max="99" step="1" data-setting="thresholds.weekly.0">
+					<input type="number" min="1" max="99" step="1" data-setting="thresholds.weekly.1">
+					<input type="number" min="1" max="99" step="1" data-setting="thresholds.weekly.2">
+				</label>
+			</div>
+		</section>
+
+		<section class="cc-section" aria-labelledby="cc-sec-memory">
+			<h2 id="cc-sec-memory">Memory <span class="cc-pill">v0.7</span></h2>
+			<p class="cc-help">Pinning, browsing, and Obsidian export. Coming in a later release.</p>
+			<fieldset disabled class="cc-disabled">
+				<label class="cc-row-label">Pin hotkey
+					<input type="text" value="P" readonly>
+				</label>
+			</fieldset>
+		</section>
+
+		<section class="cc-section cc-danger" aria-labelledby="cc-sec-danger">
+			<h2 id="cc-sec-danger">Data</h2>
+			<p class="cc-help">Wipe all local data: snapshots, message metadata, pins, settings. Cannot be undone.</p>
+			<button type="button" class="cc-btn cc-btn-danger" id="cc-wipe">Wipe all data</button>
+			<span class="cc-status" id="cc-wipe-status" aria-live="polite"></span>
+		</section>
+
+		<section class="cc-section" aria-labelledby="cc-sec-about">
+			<h2 id="cc-sec-about">About</h2>
+			<p>Claude Counter <span id="cc-version">0.5.0</span></p>
+			<p>Local-only browser extension. Source: <a href="https://github.com/Lugia19/Claude-Counter" target="_blank" rel="noopener">GitHub</a></p>
+		</section>
+	</main>
+
+	<div class="cc-saved" id="cc-saved" role="status" aria-live="polite" hidden>Saved.</div>
+
+	<script src="options.js"></script>
+</body>
+</html>

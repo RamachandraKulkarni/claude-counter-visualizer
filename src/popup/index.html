@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=360,initial-scale=1">
+	<title>Claude Counter</title>
+	<link rel="stylesheet" href="popup.css">
+</head>
+<body class="cc-popup">
+	<header class="cc-popup-header">
+		<div class="cc-popup-title">
+			<span class="cc-popup-name">Claude Counter</span>
+			<span class="cc-popup-version" id="cc-version" aria-label="Version">v0.5.0</span>
+		</div>
+		<div class="cc-popup-stale" id="cc-stale" hidden></div>
+	</header>
+
+	<main class="cc-popup-main" role="main">
+
+		<!-- NOW CARD -->
+		<section class="cc-card" id="cc-card-now" aria-labelledby="cc-card-now-title" tabindex="0">
+			<header class="cc-card-header">
+				<h2 id="cc-card-now-title" class="cc-card-title">Now</h2>
+				<button type="button" class="cc-card-action" id="cc-open-chat" aria-label="Open current chat">Open chat</button>
+			</header>
+			<div class="cc-card-body">
+				<div class="cc-row">
+					<span class="cc-label">Context</span>
+					<span class="cc-value" id="cc-now-context">—</span>
+				</div>
+				<div class="cc-bar">
+					<div class="cc-bar-fill" id="cc-now-bar"></div>
+				</div>
+				<div class="cc-row cc-row-muted">
+					<span class="cc-label">Health</span>
+					<span class="cc-chip" id="cc-now-health">—</span>
+				</div>
+				<div class="cc-row cc-row-muted">
+					<span class="cc-label">Cache</span>
+					<span class="cc-chip" id="cc-now-cache">—</span>
+				</div>
+
+				<details class="cc-heaviest">
+					<summary>Heaviest messages</summary>
+					<ul class="cc-heaviest-list" id="cc-heaviest-list" role="list">
+						<li class="cc-empty">All messages are similarly sized.</li>
+					</ul>
+				</details>
+			</div>
+		</section>
+
+		<!-- SESSION CARD -->
+		<section class="cc-card" id="cc-card-session" aria-labelledby="cc-card-session-title" tabindex="0">
+			<header class="cc-card-header">
+				<h2 id="cc-card-session-title" class="cc-card-title">Session</h2>
+				<span class="cc-card-suffix" id="cc-session-reset">—</span>
+			</header>
+			<div class="cc-card-body">
+				<div class="cc-row">
+					<span class="cc-label">Used</span>
+					<span class="cc-value" id="cc-session-pct">—</span>
+				</div>
+				<div class="cc-bar">
+					<div class="cc-bar-fill" id="cc-session-bar"></div>
+				</div>
+				<svg class="cc-spark" id="cc-spark-session" viewBox="0 0 100 24" preserveAspectRatio="none" aria-label="Session usage trend"></svg>
+			</div>
+		</section>
+
+		<!-- WEEKLY CARD -->
+		<section class="cc-card" id="cc-card-weekly" aria-labelledby="cc-card-weekly-title" tabindex="0">
+			<header class="cc-card-header">
+				<h2 id="cc-card-weekly-title" class="cc-card-title">Weekly</h2>
+				<span class="cc-card-suffix" id="cc-weekly-reset">—</span>
+			</header>
+			<div class="cc-card-body">
+				<div class="cc-row">
+					<span class="cc-label">Used</span>
+					<span class="cc-value" id="cc-weekly-pct">—</span>
+				</div>
+				<div class="cc-bar">
+					<div class="cc-bar-fill" id="cc-weekly-bar"></div>
+				</div>
+				<svg class="cc-spark" id="cc-spark-weekly" viewBox="0 0 100 24" preserveAspectRatio="none" aria-label="Weekly usage trend"></svg>
+			</div>
+		</section>
+
+		<!-- FORECAST CARD -->
+		<section class="cc-card" id="cc-card-forecast" aria-labelledby="cc-card-forecast-title" tabindex="0">
+			<header class="cc-card-header">
+				<h2 id="cc-card-forecast-title" class="cc-card-title">Forecast</h2>
+			</header>
+			<div class="cc-card-body">
+				<div class="cc-row">
+					<span class="cc-label">Session</span>
+					<span class="cc-value" id="cc-forecast-session">Need more data.</span>
+				</div>
+				<div class="cc-row">
+					<span class="cc-label">Weekly</span>
+					<span class="cc-value" id="cc-forecast-weekly">Need more data.</span>
+				</div>
+				<div class="cc-row cc-row-muted">
+					<span class="cc-label">Burn rate</span>
+					<span class="cc-value" id="cc-burn-rate">—</span>
+				</div>
+			</div>
+		</section>
+
+	</main>
+
+	<footer class="cc-popup-footer">
+		<button type="button" class="cc-icon-btn" id="cc-open-options" aria-label="Open settings" title="Settings">
+			<svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true" focusable="false">
+				<path fill="currentColor" d="M11.4 1.5h-2.8l-.4 1.9a6.8 6.8 0 0 0-1.8 1l-1.8-.7-1.4 2.4 1.5 1.3a6.8 6.8 0 0 0 0 2.2l-1.5 1.3 1.4 2.4 1.8-.7c.5.5 1.1.8 1.8 1l.4 1.9h2.8l.4-1.9c.7-.2 1.3-.6 1.8-1l1.8.7 1.4-2.4-1.5-1.3a6.8 6.8 0 0 0 0-2.2l1.5-1.3-1.4-2.4-1.8.7a6.8 6.8 0 0 0-1.8-1l-.4-1.9zM10 12.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/>
+			</svg>
+			<span>Settings</span>
+		</button>
+		<span class="cc-popup-spacer"></span>
+		<a href="https://claude.ai/" target="_blank" rel="noopener" class="cc-link" id="cc-claude-link">claude.ai</a>
+	</footer>
+
+	<script src="popup.js"></script>
+</body>
+</html>
